@@ -67,8 +67,6 @@ struct AccessTokenClaims {
 #[derive(Default, Deserialize)]
 struct AccessTokenProfileClaims {
     #[serde(default)]
-    email: Option<String>,
-    #[serde(default)]
     image: Option<String>,
     #[serde(default)]
     name: Option<String>,
@@ -408,8 +406,9 @@ impl<'a> AccountSessionsStore<'a> {
         session: &mut StoredAccountSession,
         auth_json: &mut AuthDotJson,
     ) {
-        let Ok(auth) = CodexAuth::from_auth_dot_json(
+        let Ok(auth) = CodexAuth::from_account_session_auth_dot_json(
             self.codex_home,
+            &session.session_id,
             auth_json.clone(),
             self.auth_credentials_store_mode,
             Some(self.chatgpt_base_url),
@@ -442,9 +441,7 @@ impl<'a> AccountSessionsStore<'a> {
     }
 
     fn session_from_auth_json(auth_json: &AuthDotJson) -> Option<StoredAccountSession> {
-        let Some(tokens) = auth_json.tokens.as_ref() else {
-            return None;
-        };
+        let tokens = auth_json.tokens.as_ref()?;
         let claims = Self::access_token_claims(&tokens.access_token);
         let selected_workspace_account_id = tokens
             .account_id
