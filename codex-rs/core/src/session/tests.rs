@@ -3075,6 +3075,7 @@ async fn set_rate_limits_retains_previous_credits() {
         approval_policy: config.permissions.approval_policy.clone(),
         approvals_reviewer: config.approvals_reviewer,
         permission_profile_state: config.permissions.permission_profile_state().clone(),
+        managed_allow_limited_git_writes: None,
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         cwd: config.cwd.clone(),
         workspace_roots: config.workspace_roots.clone(),
@@ -3180,6 +3181,7 @@ async fn set_rate_limits_updates_plan_type_when_present() {
         approval_policy: config.permissions.approval_policy.clone(),
         approvals_reviewer: config.approvals_reviewer,
         permission_profile_state: config.permissions.permission_profile_state().clone(),
+        managed_allow_limited_git_writes: None,
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         cwd: config.cwd.clone(),
         workspace_roots: config.workspace_roots.clone(),
@@ -3708,6 +3710,7 @@ pub(crate) async fn make_session_configuration_for_tests() -> SessionConfigurati
         approval_policy: config.permissions.approval_policy.clone(),
         approvals_reviewer: config.approvals_reviewer,
         permission_profile_state: config.permissions.permission_profile_state().clone(),
+        managed_allow_limited_git_writes: None,
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         cwd: config.cwd.clone(),
         workspace_roots: config.workspace_roots.clone(),
@@ -3850,6 +3853,54 @@ async fn session_configuration_apply_permission_profile_preserves_existing_deny_
     assert_eq!(
         updated.file_system_sandbox_policy(),
         expected_file_system_policy
+    );
+}
+
+#[tokio::test]
+async fn session_configuration_reapplies_managed_git_write_mode_on_profile_update() {
+    let mut session_configuration = make_session_configuration_for_tests().await;
+    let cwd = tempfile::tempdir().expect("create temp dir");
+    session_configuration.cwd = cwd.path().abs();
+    session_configuration.workspace_roots = vec![session_configuration.cwd.clone()];
+    session_configuration.managed_allow_limited_git_writes = Some(true);
+
+    let updated = session_configuration
+        .apply(&SessionSettingsUpdate {
+            permission_profile: Some(PermissionProfile::workspace_write()),
+            ..Default::default()
+        })
+        .expect("permission profile update should honor managed filesystem setting");
+    let policy = updated.file_system_sandbox_policy();
+
+    assert!(policy.can_write_path_with_cwd(&cwd.path().join(".git/HEAD"), cwd.path()));
+    assert!(!policy.can_write_path_with_cwd(&cwd.path().join(".git/config"), cwd.path()));
+    assert!(!policy.can_write_path_with_cwd(&cwd.path().join(".git/hooks/pre-commit"), cwd.path()));
+}
+
+#[tokio::test]
+async fn session_configuration_reapplies_managed_git_write_mode_on_sandbox_update() {
+    let mut session_configuration = make_session_configuration_for_tests().await;
+    let cwd = tempfile::tempdir().expect("create temp dir");
+    session_configuration.cwd = cwd.path().abs();
+    session_configuration.managed_allow_limited_git_writes = Some(false);
+
+    let updated = session_configuration
+        .apply(&SessionSettingsUpdate {
+            sandbox_policy: Some(SandboxPolicy::WorkspaceWrite {
+                writable_roots: Vec::new(),
+                network_access: false,
+                allow_limited_git_writes: true,
+                exclude_tmpdir_env_var: true,
+                exclude_slash_tmp: true,
+            }),
+            ..Default::default()
+        })
+        .expect("sandbox policy update should honor managed filesystem setting");
+
+    assert!(
+        !updated
+            .file_system_sandbox_policy()
+            .can_write_path_with_cwd(&cwd.path().join(".git/HEAD"), cwd.path())
     );
 }
 
@@ -4457,6 +4508,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
         approval_policy: config.permissions.approval_policy.clone(),
         approvals_reviewer: config.approvals_reviewer,
         permission_profile_state: config.permissions.permission_profile_state().clone(),
+        managed_allow_limited_git_writes: None,
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         cwd: config.cwd.clone(),
         workspace_roots: config.workspace_roots.clone(),
@@ -4567,6 +4619,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         approval_policy: config.permissions.approval_policy.clone(),
         approvals_reviewer: config.approvals_reviewer,
         permission_profile_state: config.permissions.permission_profile_state().clone(),
+        managed_allow_limited_git_writes: None,
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         cwd: config.cwd.clone(),
         workspace_roots: config.workspace_roots.clone(),
@@ -4802,6 +4855,7 @@ async fn make_session_with_config_and_rx(
         approval_policy: config.permissions.approval_policy.clone(),
         approvals_reviewer: config.approvals_reviewer,
         permission_profile_state: config.permissions.permission_profile_state().clone(),
+        managed_allow_limited_git_writes: None,
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         cwd: config.cwd.clone(),
         workspace_roots: config.workspace_roots.clone(),
@@ -4906,6 +4960,7 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
         approval_policy: config.permissions.approval_policy.clone(),
         approvals_reviewer: config.approvals_reviewer,
         permission_profile_state: config.permissions.permission_profile_state().clone(),
+        managed_allow_limited_git_writes: None,
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         cwd: config.cwd.clone(),
         workspace_roots: config.workspace_roots.clone(),
@@ -6402,6 +6457,7 @@ where
         approval_policy: config.permissions.approval_policy.clone(),
         approvals_reviewer: config.approvals_reviewer,
         permission_profile_state: config.permissions.permission_profile_state().clone(),
+        managed_allow_limited_git_writes: None,
         windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
         cwd: config.cwd.clone(),
         workspace_roots: config.workspace_roots.clone(),

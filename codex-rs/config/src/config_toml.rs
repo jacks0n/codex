@@ -760,7 +760,6 @@ impl ConfigToml {
                 Some(SandboxWorkspaceWrite {
                     writable_roots,
                     network_access,
-                    allow_limited_git_writes,
                     exclude_tmpdir_env_var,
                     exclude_slash_tmp,
                 }) => {
@@ -772,7 +771,7 @@ impl ConfigToml {
                     PermissionProfile::workspace_write_with(
                         writable_roots,
                         network_policy,
-                        *allow_limited_git_writes,
+                        /*allow_limited_git_writes*/ false,
                         *exclude_tmpdir_env_var,
                         *exclude_slash_tmp,
                     )

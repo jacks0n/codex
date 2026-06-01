@@ -77,7 +77,6 @@ pub(crate) fn builtin_permission_profile(
             Some(SandboxWorkspaceWrite {
                 writable_roots: _,
                 network_access,
-                allow_limited_git_writes,
                 exclude_tmpdir_env_var,
                 exclude_slash_tmp,
             }) => PermissionProfile::workspace_write_with(
@@ -87,7 +86,7 @@ pub(crate) fn builtin_permission_profile(
                 } else {
                     NetworkSandboxPolicy::Restricted
                 },
-                *allow_limited_git_writes,
+                /*allow_limited_git_writes*/ false,
                 *exclude_tmpdir_env_var,
                 *exclude_slash_tmp,
             ),
@@ -250,10 +249,20 @@ pub(crate) fn compile_permission_profile(
         profile,
         inherited_profile_names,
     } = resolve_permission_profile(permissions, profile_name)?;
+    let allow_limited_git_writes = profile
+        .filesystem
+        .as_ref()
+        .is_some_and(|filesystem| filesystem.allow_limited_git_writes);
     let base_permissions = inherited_profile_names.iter().find_map(|name| {
         match name.as_str() {
             BUILT_IN_READ_ONLY_PROFILE => Some(PermissionProfile::read_only()),
-            BUILT_IN_WORKSPACE_PROFILE => Some(PermissionProfile::workspace_write()),
+            BUILT_IN_WORKSPACE_PROFILE => Some(PermissionProfile::workspace_write_with(
+                &[],
+                NetworkSandboxPolicy::Restricted,
+                allow_limited_git_writes,
+                /*exclude_tmpdir_env_var*/ false,
+                /*exclude_slash_tmp*/ false,
+            )),
             _ => None,
         }
         .map(|profile| profile.to_runtime_permissions())
@@ -313,10 +322,7 @@ pub(crate) fn compile_permission_profile(
             .as_ref()
             .and_then(|filesystem| filesystem.glob_scan_max_depth),
     )?;
-    file_system_sandbox_policy.allow_limited_git_writes = profile
-        .filesystem
-        .as_ref()
-        .is_some_and(|filesystem| filesystem.allow_limited_git_writes);
+    file_system_sandbox_policy.allow_limited_git_writes = allow_limited_git_writes;
     if let Some(glob_scan_max_depth) = glob_scan_max_depth {
         file_system_sandbox_policy.glob_scan_max_depth = Some(glob_scan_max_depth);
     }

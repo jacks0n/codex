@@ -438,11 +438,13 @@ impl From<NetworkRequirementsToml> for NetworkConstraints {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FilesystemRequirementsToml {
     pub deny_read: Option<Vec<FilesystemDenyReadPattern>>,
+    pub allow_limited_git_writes: Option<bool>,
 }
 
 #[derive(Deserialize)]
 struct RawFilesystemRequirementsToml {
     deny_read: Option<Vec<FilesystemDenyReadPattern>>,
+    allow_limited_git_writes: Option<bool>,
     description: Option<serde::de::IgnoredAny>,
     extends: Option<serde::de::IgnoredAny>,
     workspace_roots: Option<serde::de::IgnoredAny>,
@@ -458,6 +460,7 @@ impl<'de> Deserialize<'de> for FilesystemRequirementsToml {
         let raw = RawFilesystemRequirementsToml::deserialize(deserializer)?;
         let RawFilesystemRequirementsToml {
             deny_read,
+            allow_limited_git_writes,
             description,
             extends,
             workspace_roots,
@@ -476,7 +479,10 @@ impl<'de> Deserialize<'de> for FilesystemRequirementsToml {
             ));
         }
 
-        Ok(Self { deny_read })
+        Ok(Self {
+            deny_read,
+            allow_limited_git_writes,
+        })
     }
 }
 
@@ -492,15 +498,18 @@ pub struct PermissionsRequirementsToml {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FilesystemConstraints {
     pub deny_read: Vec<FilesystemDenyReadPattern>,
+    pub allow_limited_git_writes: Option<bool>,
 }
 
 impl From<PermissionsRequirementsToml> for FilesystemConstraints {
     fn from(value: PermissionsRequirementsToml) -> Self {
-        let deny_read = value
-            .filesystem
-            .and_then(|filesystem| filesystem.deny_read)
-            .unwrap_or_default();
-        Self { deny_read }
+        let Some(filesystem) = value.filesystem else {
+            return Self::default();
+        };
+        Self {
+            deny_read: filesystem.deny_read.unwrap_or_default(),
+            allow_limited_git_writes: filesystem.allow_limited_git_writes,
+        }
     }
 }
 
@@ -1825,6 +1834,7 @@ allowed_approvals_reviewers = ["user"]
             r#"
             [permissions.filesystem]
             deny_read = [{deny_read_0:?}, {deny_read_1:?}]
+            allow_limited_git_writes = true
         "#
         );
 
@@ -1839,6 +1849,7 @@ allowed_approvals_reviewers = ["user"]
                         AbsolutePathBuf::from_absolute_path(deny_read_0)?.into(),
                         AbsolutePathBuf::from_absolute_path(deny_read_1)?.into(),
                     ],
+                    allow_limited_git_writes: Some(true),
                 },
                 RequirementSource::Unknown,
             ))
@@ -1867,6 +1878,7 @@ allowed_approvals_reviewers = ["user"]
                         FilesystemDenyReadPattern::from_input("./private/**/*.txt")
                             .expect("normalize glob pattern"),
                     ],
+                    allow_limited_git_writes: None,
                 },
                 RequirementSource::Unknown,
             ))
