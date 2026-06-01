@@ -234,7 +234,7 @@ pub struct FilesystemPermissionsToml {
     #[schemars(range(min = 1))]
     pub glob_scan_max_depth: Option<usize>,
     #[serde(default)]
-    pub allow_limited_git_writes: bool,
+    pub allow_git: bool,
     #[serde(flatten)]
     pub entries: BTreeMap<String, FilesystemPermissionToml>,
 }

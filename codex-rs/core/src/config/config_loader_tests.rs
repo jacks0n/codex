@@ -1545,7 +1545,7 @@ extends = ":workspace"
         let requirements = format!(
             r#"
 [permissions.filesystem]
-allow_limited_git_writes = true
+allow_git = true
 
 {managed_profile}"#
         );
@@ -1597,11 +1597,11 @@ default_permissions = "local"
 extends = ":workspace"
 
 [permissions.local.filesystem]
-allow_limited_git_writes = true
+allow_git = true
 "#,
         r#"
 [permissions.filesystem]
-allow_limited_git_writes = false
+allow_git = false
 "#,
         None,
     )
@@ -1639,7 +1639,7 @@ extends = ":workspace"
 "#,
         r#"
 [permissions.filesystem]
-allow_limited_git_writes = true
+allow_git = true
 "#,
         None,
     )
@@ -1675,7 +1675,7 @@ exclude_slash_tmp = true
 "#,
         r#"
 [permissions.filesystem]
-allow_limited_git_writes = true
+allow_git = true
 "#,
         None,
     )
@@ -1713,7 +1713,7 @@ async fn system_filesystem_requirements_reject_unrestricted_profile_selection() 
         r#"sandbox_mode = "danger-full-access""#,
         r#"
 [permissions.filesystem]
-allow_limited_git_writes = true
+allow_git = true
 "#,
         None,
     )

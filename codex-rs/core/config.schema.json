@@ -867,7 +867,7 @@
     },
     "FilesystemPermissionsToml": {
       "properties": {
-        "allow_limited_git_writes": {
+        "allow_git": {
           "default": false,
           "type": "boolean"
         },

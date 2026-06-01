@@ -252,7 +252,7 @@ pub(crate) fn compile_permission_profile(
     let allow_limited_git_writes = profile
         .filesystem
         .as_ref()
-        .is_some_and(|filesystem| filesystem.allow_limited_git_writes);
+        .is_some_and(|filesystem| filesystem.allow_git);
     let base_permissions = inherited_profile_names.iter().find_map(|name| {
         match name.as_str() {
             BUILT_IN_READ_ONLY_PROFILE => Some(PermissionProfile::read_only()),
