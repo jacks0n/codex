@@ -324,10 +324,7 @@ impl ConfigManager {
     ) -> std::io::Result<Config> {
         match self.load_latest_config(fallback_cwd).await {
             Ok(config) => Ok(config),
-            Err(error)
-                if self.strict_config
-                    || crate::is_unsupported_untrusted_approval_policy_error(&error) =>
-            {
+            Err(error) if self.strict_config => {
                 Err(error)
             }
             Err(error) => {
