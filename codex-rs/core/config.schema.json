@@ -263,6 +263,13 @@
       "description": "Determines the conditions under which the user is consulted to approve running the command proposed by Codex.",
       "oneOf": [
         {
+          "description": "Require approval unless an explicit exec policy rule allows the command.",
+          "enum": [
+            "untrusted"
+          ],
+          "type": "string"
+        },
+        {
           "description": "The model decides when to ask the user for approval.",
           "enum": [
             "on-request"

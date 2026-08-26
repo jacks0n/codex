@@ -2836,6 +2836,85 @@ async fn permission_request_hook_allows_exec_command_without_user_approval() -> 
 }
 
 #[tokio::test]
+async fn explicit_untrusted_config_routes_unmatched_command_through_permission_hook() -> Result<()>
+{
+    skip_if_no_network!(Ok(()));
+    skip_if_wine_exec!(Ok(()), "shell_command is unavailable for Wine executors");
+
+    let server = start_mock_server().await;
+    let call_id = "untrusted-config-permission-hook";
+    let expected_output = "agentperm-compatible-allow";
+    let command = match test_target_os() {
+        TestTargetOs::Linux | TestTargetOs::MacOs => format!("printf {expected_output}"),
+        TestTargetOs::Windows => format!("Write-Output {expected_output}"),
+    };
+    let args = serde_json::json!({ "command": command });
+    let responses = mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_response_created("resp-untrusted-config-1"),
+                ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+                ev_completed("resp-untrusted-config-1"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-untrusted-config-2"),
+                ev_assistant_message("msg-untrusted-config", "permission hook allowed it"),
+                ev_completed("resp-untrusted-config-2"),
+            ]),
+        ],
+    )
+    .await;
+
+    let mut builder = test_codex()
+        .with_pre_build_hook(|home| {
+            install_allow_permission_request_hook(home)
+                .expect("failed to write permission request hook test fixture");
+            fs::write(
+                home.join("config.toml"),
+                r#"approval_policy = "untrusted"
+sandbox_mode = "danger-full-access"
+
+[features]
+hooks = true
+"#,
+            )
+            .expect("failed to write untrusted approval config test fixture");
+        })
+        .with_config(trust_discovered_hooks);
+    let test = builder.build_with_auto_env(&server).await?;
+
+    assert_eq!(
+        test.config.permissions.approval_policy.value(),
+        AskForApproval::UnlessTrusted
+    );
+    assert_eq!(
+        test.config.permissions.effective_permission_profile(),
+        PermissionProfile::Disabled
+    );
+
+    test.submit_text_turn("run the unmatched command after hook approval")
+        .await?;
+
+    let requests = responses.requests();
+    assert_eq!(requests.len(), 2);
+    let output = requests[1]
+        .function_call_output_text(call_id)
+        .expect("approved command should return textual output");
+    assert!(
+        output.contains(expected_output),
+        "approved command output missing {expected_output:?}: {output}"
+    );
+    assert_single_permission_request_hook_input(
+        test.codex_home_path(),
+        &command,
+        /*description*/ None,
+    )?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn permission_request_hook_allow_bypasses_strict_auto_review() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_wine_exec!(
