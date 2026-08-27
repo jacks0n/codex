@@ -344,6 +344,7 @@ impl ChatWidget {
             | ServerNotification::AccountRateLimitsUpdated(_)
             | ServerNotification::ThreadStarted(_)
             | ServerNotification::ThreadStatusChanged(_)
+            | ServerNotification::ThreadFullAccessUpdated(_)
             | ServerNotification::ThreadReverted(_)
             | ServerNotification::ThreadQueueChanged(_)
             | ServerNotification::ThreadArchived(_)

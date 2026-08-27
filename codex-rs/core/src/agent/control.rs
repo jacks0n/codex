@@ -16,6 +16,7 @@ use crate::config::RolloutBudgetConfig;
 use crate::context::SubagentNotification;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::rollout_budget::RolloutBudget;
+use crate::runtime_permissions::RuntimeFullAccessState;
 use crate::session::emit_subagent_session_started;
 use crate::session_prefix::format_inter_agent_completion_message;
 use crate::session_prefix::format_subagent_context_line;
@@ -107,6 +108,8 @@ pub(crate) struct LocalAgentControl {
     agent_execution_limiter: Arc<AgentExecutionLimiter>,
     /// Session-scoped state shared by the root thread and every cloned sub-agent control handle.
     rollout_budget: Arc<RolloutBudget>,
+    /// Runtime-only Full Access override shared by the root and all descendants.
+    full_access: Arc<RuntimeFullAccessState>,
     /// The user-selected root routing tier, shared by the entire agent tree.
     root_service_tier: Arc<ArcSwapOption<String>>,
     /// Retains the root's opt-in instruction provider even when the root is unloaded.
@@ -138,6 +141,7 @@ impl LocalAgentControl {
             v2_residency: Arc::default(),
             agent_execution_limiter: Arc::default(),
             rollout_budget: Arc::default(),
+            full_access: Arc::default(),
             root_service_tier: Arc::new(ArcSwapOption::from(None)),
             shared_thread_instructions_provider: Arc::default(),
         };
@@ -179,6 +183,10 @@ impl LocalAgentControl {
                 .set(Arc::clone(provider));
         }
         provider
+    }
+
+    pub(crate) fn runtime_full_access(&self) -> Arc<RuntimeFullAccessState> {
+        Arc::clone(&self.full_access)
     }
 
     /// Send rich user input items to an existing agent thread.

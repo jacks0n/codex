@@ -740,6 +740,8 @@ See the Codex keymap documentation for supported actions and examples."
         #[cfg(not(debug_assertions))]
         let upgrade_version = crate::updates::get_upgrade_version(&config);
 
+        let yolo_mode = YoloMode::default();
+
         let mut app = Self {
             feature_write_lock: Arc::default(),
             model_catalog,
@@ -819,6 +821,7 @@ See the Codex keymap documentation for supported actions and examples."
             primary_session_configured: None,
             pending_primary_events: VecDeque::new(),
             pending_app_server_requests: PendingAppServerRequests::default(),
+            yolo_mode,
             dynamic_tool_status_updates,
             dynamic_tool_tasks: HashMap::new(),
             pending_startup_thread_start,
@@ -855,6 +858,7 @@ See the Codex keymap documentation for supported actions and examples."
                 /*server_version*/ None,
             );
         }
+        app.refresh_yolo_status();
         if start_in_agents_overview {
             app.open_agents_overview(&app_server);
         } else if !matches!(app.app_server_target, AppServerTarget::Embedded) {
