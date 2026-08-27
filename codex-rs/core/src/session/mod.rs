@@ -3839,6 +3839,11 @@ impl Session {
         );
         let session_telemetry = settings.telemetry(&turn_context.session_telemetry);
         let environments = environments.or_cancel(cancellation_token).await?;
+        let environments = if turn_context.runtime_full_access_enabled {
+            environments.with_full_access()
+        } else {
+            environments
+        };
         // Keep both preparation futures off caller stacks while they are live together.
         let load_agents_md = Box::pin(async {
             let (loaded_agents_md, warnings) = self

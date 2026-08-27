@@ -8,6 +8,7 @@ use crate::agent::api::AgentControl;
 use crate::agent::registry::AgentRegistry;
 use crate::config::RolloutBudgetConfig;
 use crate::rollout_budget::RolloutBudget;
+use crate::runtime_permissions::RuntimeFullAccessState;
 use crate::thread_manager::ThreadIdGenerator;
 use crate::thread_manager::ThreadManagerState;
 use arc_swap::ArcSwapOption;
@@ -30,6 +31,8 @@ pub(crate) struct LocalAgentRuntime {
     pub(super) agent_execution_limiter: Arc<AgentExecutionLimiter>,
     /// Session-scoped state shared by the root thread and every cloned sub-agent control handle.
     pub(super) rollout_budget: Arc<RolloutBudget>,
+    /// Runtime-only Full Access override shared by the root and all descendants.
+    full_access: Arc<RuntimeFullAccessState>,
     /// The user-selected root routing tier, shared by the entire agent tree.
     pub(super) root_service_tier: Arc<ArcSwapOption<String>>,
     /// Retains the root's opt-in instruction provider even when the root is unloaded.
@@ -52,6 +55,7 @@ impl LocalAgentRuntime {
             residency: Arc::default(),
             agent_execution_limiter: Arc::default(),
             rollout_budget: Arc::default(),
+            full_access: Arc::default(),
             root_service_tier: Arc::new(ArcSwapOption::from(None)),
             shared_thread_instructions_provider: Arc::default(),
         };
@@ -106,6 +110,10 @@ impl AgentControlInit {
 impl LocalAgentRuntime {
     pub(crate) fn generate_thread_id(&self) -> ThreadId {
         (self.thread_id_generator)()
+    }
+
+    pub(crate) fn runtime_full_access(&self) -> Arc<RuntimeFullAccessState> {
+        Arc::clone(&self.full_access)
     }
 
     pub(crate) fn root_thread_instructions_provider(

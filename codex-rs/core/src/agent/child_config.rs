@@ -175,7 +175,7 @@ fn apply_spawn_agent_runtime_overrides(
     config
         .permissions
         .approval_policy
-        .set(turn.approval_policy())
+        .set(turn.config.permissions.approval_policy.value())
         .map_err(|err| format!("approval_policy is invalid: {err}"))?;
     config.approvals_reviewer = turn.config.approvals_reviewer;
     #[allow(deprecated)]
