@@ -835,7 +835,7 @@ async fn review_guardian_mcp_elicitation(
         }));
     }
 
-    let approval_policy = mcp_config.approval_policy.value();
+    let approval_policy = turn_context.approval_policy();
     match approval_policy {
         AskForApproval::Never => {
             let Some(permission_profile) =
@@ -843,9 +843,11 @@ async fn review_guardian_mcp_elicitation(
             else {
                 return Ok(Some(mcp_elicitation_decline_without_message()));
             };
+            let permission_profile =
+                turn_context.effective_mcp_permission_profile(permission_profile);
             if codex_mcp::mcp_permission_prompt_is_auto_approved(
                 approval_policy,
-                permission_profile,
+                &permission_profile,
                 codex_mcp::McpPermissionPromptAutoApproveContext::default(),
             ) && matches!(
                 &request.elicitation,

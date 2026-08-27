@@ -3329,6 +3329,11 @@ impl Session {
         let session_telemetry = settings.telemetry(&turn_context.session_telemetry);
         // Keep selections fixed for the turn while allowing their startup work to finish.
         let environments = turn_context.environments.refresh_readiness();
+        let environments = if turn_context.runtime_full_access_enabled {
+            environments.with_full_access()
+        } else {
+            environments
+        };
         self.services
             .agents_md_manager
             .refresh(&turn_context.config, &environments)

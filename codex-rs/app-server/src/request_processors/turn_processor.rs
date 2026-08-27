@@ -3,6 +3,9 @@ use super::*;
 use codex_agent_extension::AgentInvocation;
 use codex_agent_extension::AgentRun;
 use codex_agent_extension::AgentRunner;
+use codex_app_server_protocol::ThreadFullAccessUpdateParams;
+use codex_app_server_protocol::ThreadFullAccessUpdateResponse;
+use codex_app_server_protocol::ThreadFullAccessUpdatedNotification;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputBody;
@@ -238,6 +241,31 @@ impl TurnRequestProcessor {
             TurnSettingsUpdateOutcome::Rejected { reason } => return Err(invalid_request(reason)),
         };
         Ok(Some(TurnSettingsUpdateResponse { status }.into()))
+    }
+
+    pub(crate) async fn thread_full_access_update(
+        &self,
+        params: ThreadFullAccessUpdateParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (thread_id, _) = self.load_thread(&params.thread_id).await?;
+        self.thread_manager
+            .set_agent_tree_full_access(thread_id, params.enabled)
+            .await
+            .map_err(|err| invalid_request(err.to_string()))?;
+        self.outgoing
+            .send_server_notification(ServerNotification::ThreadFullAccessUpdated(
+                ThreadFullAccessUpdatedNotification {
+                    thread_id: thread_id.to_string(),
+                    enabled: params.enabled,
+                },
+            ))
+            .await;
+        Ok(Some(
+            ThreadFullAccessUpdateResponse {
+                enabled: params.enabled,
+            }
+            .into(),
+        ))
     }
 
     pub(crate) async fn turn_steer(

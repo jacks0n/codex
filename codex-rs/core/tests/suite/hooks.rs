@@ -25,6 +25,7 @@ use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
+use codex_protocol::protocol::ReviewDecision;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadSettingsOverrides;
@@ -688,6 +689,8 @@ elif mode == "deny":
             }}
         }}
     }}))
+elif mode == "no_opinion":
+    print(json.dumps({{}}))
 elif mode == "exit_2":
     sys.stderr.write(reason + "\n")
     raise SystemExit(2)
@@ -2839,7 +2842,7 @@ async fn permission_request_hook_allows_exec_command_without_user_approval() -> 
 async fn explicit_untrusted_config_routes_unmatched_command_through_permission_hook() -> Result<()>
 {
     skip_if_no_network!(Ok(()));
-    skip_if_wine_exec!(Ok(()), "shell_command is unavailable for Wine executors");
+    skip_if_wine_exec!(Ok(()), "exec_command is unavailable for Wine executors");
 
     let server = start_mock_server().await;
     let call_id = "untrusted-config-permission-hook";
@@ -2848,13 +2851,13 @@ async fn explicit_untrusted_config_routes_unmatched_command_through_permission_h
         TestTargetOs::Linux | TestTargetOs::MacOs => format!("printf {expected_output}"),
         TestTargetOs::Windows => format!("Write-Output {expected_output}"),
     };
-    let args = serde_json::json!({ "command": command });
+    let args = serde_json::json!({ "cmd": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
             sse(vec![
                 ev_response_created("resp-untrusted-config-1"),
-                ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+                ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
                 ev_completed("resp-untrusted-config-1"),
             ]),
             sse(vec![
@@ -2910,6 +2913,91 @@ hooks = true
         &command,
         /*description*/ None,
     )?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn untrusted_permission_hook_no_opinion_preserves_full_command_in_approval() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_wine_exec!(Ok(()), "exec_command is unavailable for Wine executors");
+
+    let server = start_mock_server().await;
+    let call_id = "untrusted-config-permission-hook-ask";
+    let command = match test_target_os() {
+        TestTargetOs::Linux | TestTargetOs::MacOs => "printf agentperm-ask",
+        TestTargetOs::Windows => "Write-Output agentperm-ask",
+    };
+    let args = serde_json::json!({ "cmd": command });
+    let _response = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-untrusted-config-ask"),
+            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_completed("resp-untrusted-config-ask"),
+        ]),
+    )
+    .await;
+
+    let mut builder = test_codex()
+        .with_pre_build_hook(|home| {
+            write_permission_request_hook(
+                home,
+                Some(PERMISSION_REQUEST_HOOK_MATCHER),
+                "no_opinion",
+                "",
+            )
+            .expect("failed to write permission request hook test fixture");
+            fs::write(
+                home.join("config.toml"),
+                r#"approval_policy = "untrusted"
+sandbox_mode = "danger-full-access"
+
+[features]
+hooks = true
+"#,
+            )
+            .expect("failed to write untrusted approval config test fixture");
+        })
+        .with_config(trust_discovered_hooks);
+    let test = builder.build_with_auto_env(&server).await?;
+
+    test.codex
+        .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
+            text: "run the command after asking me".to_string(),
+            text_elements: Vec::new(),
+        }]))
+        .await?;
+    let event = wait_for_event(&test.codex, |event| {
+        matches!(
+            event,
+            EventMsg::ExecApprovalRequest(_) | EventMsg::TurnComplete(_)
+        )
+    })
+    .await;
+    let EventMsg::ExecApprovalRequest(approval) = event else {
+        panic!("expected approval request before completion");
+    };
+    assert_eq!(approval.command.last().map(String::as_str), Some(command));
+    assert_single_permission_request_hook_input(
+        test.codex_home_path(),
+        command,
+        /*description*/ None,
+    )?;
+
+    test.codex
+        .submit(Op::ExecApproval {
+            id: approval.effective_approval_id(),
+            turn_id: None,
+            decision: ReviewDecision::Denied {
+                rejection: "test cleanup".to_string(),
+            },
+        })
+        .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
 
     Ok(())
 }

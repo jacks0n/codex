@@ -163,6 +163,14 @@ impl TurnEnvironment {
         self.config_origin
             .into_input_selection(self.selection.clone())
     }
+
+    pub(crate) fn with_permission_profile(mut self, permission_profile: PermissionProfile) -> Self {
+        let EnvironmentConfigState::Ready(config) = &mut self.selection.config else {
+            unreachable!("ready turn environments always carry resolved configuration")
+        };
+        config.permission_profile = PermissionProfileSnapshot::legacy(permission_profile);
+        self
+    }
 }
 
 impl std::fmt::Debug for TurnEnvironment {
@@ -203,6 +211,8 @@ pub struct TurnContext {
     pub(crate) configured_token_budget: Option<TokenBudgetConfig>,
     /// Captured once so later steps do not re-read config layers to detect user preferences.
     pub(crate) use_model_token_budget_defaults: bool,
+    /// Full Access state captured when this turn was created. Runtime toggles affect future turns.
+    pub(crate) runtime_full_access_enabled: bool,
     pub(crate) auth_manager: Option<Arc<AuthManager>>,
     /// Frozen settings used to construct this context. Legacy turn consumers
     /// keep this view even when later steps use different settings.
@@ -336,7 +346,11 @@ impl TurnContext {
     /// Legacy: returns the frozen initial-turn approval policy.
     /// Step-scoped consumers should use their captured `StepContext::settings`.
     pub(crate) fn approval_policy(&self) -> AskForApproval {
-        self.config.permissions.approval_policy.value()
+        if self.runtime_full_access_enabled {
+            AskForApproval::Never
+        } else {
+            self.config.permissions.approval_policy.value()
+        }
     }
 
     /// Legacy: returns the frozen initial-turn prefix-rule policy.
@@ -381,8 +395,27 @@ impl TurnContext {
 
     /// Returns the selected environment's permissions, or the thread's permissions when none is ready.
     pub(crate) fn permission_profile(&self) -> PermissionProfile {
-        self.environments
-            .permission_profile_or_else(|| self.config.permissions.effective_permission_profile())
+        let configured = self
+            .environments
+            .permission_profile_or_else(|| self.config.permissions.effective_permission_profile());
+        if self.environments.primary_config_origin() == Some(EnvironmentConfigOrigin::Owner) {
+            configured
+        } else if self.runtime_full_access_enabled {
+            PermissionProfile::Disabled
+        } else {
+            configured
+        }
+    }
+
+    pub(crate) fn effective_mcp_permission_profile(
+        &self,
+        configured: &PermissionProfile,
+    ) -> PermissionProfile {
+        if self.runtime_full_access_enabled {
+            self.permission_profile()
+        } else {
+            configured.clone()
+        }
     }
 
     pub(crate) fn file_system_sandbox_policy(&self) -> FileSystemSandboxPolicy {
@@ -516,6 +549,7 @@ impl TurnContext {
             config: Arc::new(config),
             configured_token_budget: self.configured_token_budget.clone(),
             use_model_token_budget_defaults: self.use_model_token_budget_defaults,
+            runtime_full_access_enabled: self.runtime_full_access_enabled,
             auth_manager: self.auth_manager.clone(),
             initial_settings: Arc::clone(&step_settings),
             current_settings: ArcSwap::from(step_settings),
@@ -719,6 +753,7 @@ impl Session {
         main_execve_wrapper_exe: Option<&PathBuf>,
         per_turn_config: Config,
         step_settings: Arc<ResolvedStepSettings>,
+        runtime_full_access_enabled: bool,
         models_manager: &SharedModelsManager,
         network: Option<NetworkProxy>,
         environments: TurnEnvironmentSnapshot,
@@ -787,6 +822,7 @@ impl Session {
             config: per_turn_config,
             configured_token_budget,
             use_model_token_budget_defaults,
+            runtime_full_access_enabled,
             auth_manager,
             initial_settings: Arc::clone(&step_settings),
             current_settings: ArcSwap::from(step_settings),
@@ -1003,6 +1039,10 @@ impl Session {
             self.services.main_execve_wrapper_exe.as_ref(),
             per_turn_config,
             step_settings,
+            self.services
+                .agent_control
+                .runtime_full_access()
+                .is_enabled(),
             &self.services.models_manager,
             self.services
                 .network_proxy

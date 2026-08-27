@@ -72,6 +72,8 @@ use codex_app_server_protocol::ThreadDeleteParams;
 use codex_app_server_protocol::ThreadDeleteResponse;
 use codex_app_server_protocol::ThreadForkParams;
 use codex_app_server_protocol::ThreadForkResponse;
+use codex_app_server_protocol::ThreadFullAccessUpdateParams;
+use codex_app_server_protocol::ThreadFullAccessUpdateResponse;
 use codex_app_server_protocol::ThreadGoalClearParams;
 use codex_app_server_protocol::ThreadGoalClearResponse;
 use codex_app_server_protocol::ThreadGoalGetParams;
@@ -155,6 +157,7 @@ const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 const JSONRPC_INVALID_PARAMS: i64 = -32602;
 pub(crate) const EXTERNAL_AGENT_CONFIG_IMPORT_IN_PROGRESS_MESSAGE: &str = "A previous external agent import is still running. Wait for it to finish before importing again.";
 const THREAD_SETTINGS_UPDATE_METHOD: &str = "thread/settings/update";
+const THREAD_FULL_ACCESS_UPDATE_METHOD: &str = "thread/fullAccess/update";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ForkGoalContinuation {
@@ -267,6 +270,12 @@ fn is_thread_settings_update_unsupported(source: &JSONRPCErrorError) -> bool {
             && source.message.contains(THREAD_SETTINGS_UPDATE_METHOD))
 }
 
+fn is_thread_full_access_update_unsupported(source: &JSONRPCErrorError) -> bool {
+    source.code == JSONRPC_METHOD_NOT_FOUND
+        || (source.code == JSONRPC_INVALID_REQUEST
+            && source.message.contains(THREAD_FULL_ACCESS_UPDATE_METHOD))
+}
+
 /// Data collected during the TUI bootstrap phase that the main event loop
 /// needs to configure the UI, telemetry, and initial rate-limit prefetch.
 ///
@@ -301,6 +310,7 @@ pub(crate) struct AppServerSession {
     background_rollout_migration_enabled: bool,
     history_support: ThreadHistorySupport,
     thread_settings_update_supported: bool,
+    full_access_update_supported: bool,
     default_model: Option<String>,
     available_models: Vec<ModelPreset>,
     managed_new_thread_defaults: Option<NewThreadModelDefaults>,
@@ -389,6 +399,7 @@ impl AppServerSession {
             background_rollout_migration_enabled: true,
             history_support: ThreadHistorySupport::Paginated,
             thread_settings_update_supported: true,
+            full_access_update_supported: true,
             default_model: None,
             available_models: Vec::new(),
             managed_new_thread_defaults: None,
@@ -1153,6 +1164,39 @@ impl AppServerSession {
                 Ok(false)
             }
             Err(err) => Err(err).wrap_err("thread/settings/update failed in TUI"),
+        }
+    }
+
+    pub(crate) async fn thread_full_access_update(
+        &mut self,
+        thread_id: ThreadId,
+        enabled: bool,
+    ) -> Result<Option<bool>> {
+        if !self.full_access_update_supported {
+            return Ok(None);
+        }
+        let request_id = self.next_request_id();
+        match self
+            .client
+            .request_typed::<ThreadFullAccessUpdateResponse>(
+                ClientRequest::ThreadFullAccessUpdate {
+                    request_id,
+                    params: ThreadFullAccessUpdateParams {
+                        thread_id: thread_id.to_string(),
+                        enabled,
+                    },
+                },
+            )
+            .await
+        {
+            Ok(response) => Ok(Some(response.enabled)),
+            Err(TypedRequestError::Server { source, .. })
+                if is_thread_full_access_update_unsupported(&source) =>
+            {
+                self.full_access_update_supported = false;
+                Ok(None)
+            }
+            Err(err) => Err(err).wrap_err("thread/fullAccess/update failed in TUI"),
         }
     }
 

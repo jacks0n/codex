@@ -89,6 +89,8 @@ pub(crate) struct AppKeymap {
     pub(crate) toggle_vim_mode: Vec<KeyBinding>,
     /// Toggle Fast mode.
     pub(crate) toggle_fast_mode: Vec<KeyBinding>,
+    /// Toggle Full Access, displayed as YOLO.
+    pub(crate) toggle_yolo_mode: Vec<KeyBinding>,
     /// Toggle raw scrollback mode for copy-friendly transcript selection.
     pub(crate) toggle_raw_output: Vec<KeyBinding>,
     /// Switch between a side conversation and its parent without closing either.
@@ -600,6 +602,14 @@ impl RuntimeKeymap {
                     binding.action.context.overlaps(KeymapContext::Global)
                         && binding.chord.prefix.parts() == key_hint::alt(KeyCode::Char('a')).parts()
                 }));
+        let yolo_default_is_shadowed = keymap.global.toggle_yolo_mode.is_none()
+            && (configured_main_surface_alias_is_used(keymap, "alt-y")
+                || configured_context_alias_is_used(&keymap.list, "alt-y")
+                || configured_context_alias_is_used(&keymap.approval, "alt-y")
+                || chords.bindings.iter().any(|binding| {
+                    binding.action.context.overlaps(KeymapContext::Global)
+                        && binding.chord.prefix.parts() == key_hint::alt(KeyCode::Char('y')).parts()
+                }));
 
         let app = AppKeymap {
             open_agents: if open_agents_default_is_shadowed {
@@ -641,6 +651,15 @@ impl RuntimeKeymap {
                 &defaults.app.toggle_fast_mode,
                 "tui.keymap.global.toggle_fast_mode",
             )?,
+            toggle_yolo_mode: if yolo_default_is_shadowed {
+                Vec::new()
+            } else {
+                resolve_bindings(
+                    keymap.global.toggle_yolo_mode.as_ref(),
+                    &defaults.app.toggle_yolo_mode,
+                    "tui.keymap.global.toggle_yolo_mode",
+                )?
+            },
             toggle_raw_output: resolve_bindings(
                 keymap.global.toggle_raw_output.as_ref(),
                 &defaults.app.toggle_raw_output,
@@ -1245,6 +1264,10 @@ impl RuntimeKeymap {
                 app.toggle_fast_mode.as_slice(),
             ),
             (
+                keymap.global.toggle_yolo_mode.as_ref(),
+                app.toggle_yolo_mode.as_slice(),
+            ),
+            (
                 keymap.global.toggle_raw_output.as_ref(),
                 app.toggle_raw_output.as_slice(),
             ),
@@ -1395,6 +1418,7 @@ impl RuntimeKeymap {
                 clear_terminal: default_bindings![ctrl(KeyCode::Char('l'))],
                 toggle_vim_mode: default_bindings![],
                 toggle_fast_mode: default_bindings![],
+                toggle_yolo_mode: default_bindings![alt(KeyCode::Char('y'))],
                 toggle_raw_output: default_bindings![alt(KeyCode::Char('r'))],
                 toggle_side_conversation: default_bindings![ctrl(KeyCode::Char('/'))],
             },
@@ -1735,6 +1759,7 @@ impl RuntimeKeymap {
                 ("clear_terminal", self.app.clear_terminal.as_slice()),
                 ("toggle_vim_mode", self.app.toggle_vim_mode.as_slice()),
                 ("toggle_fast_mode", self.app.toggle_fast_mode.as_slice()),
+                ("toggle_yolo_mode", self.app.toggle_yolo_mode.as_slice()),
                 ("toggle_raw_output", self.app.toggle_raw_output.as_slice()),
                 ("toggle_side_conversation", side_toggle_bindings.as_slice()),
                 ("chat.interrupt_turn", self.chat.interrupt_turn.as_slice()),
@@ -1788,6 +1813,7 @@ impl RuntimeKeymap {
                 ("clear_terminal", self.app.clear_terminal.as_slice()),
                 ("toggle_vim_mode", self.app.toggle_vim_mode.as_slice()),
                 ("toggle_fast_mode", self.app.toggle_fast_mode.as_slice()),
+                ("toggle_yolo_mode", self.app.toggle_yolo_mode.as_slice()),
                 ("toggle_raw_output", self.app.toggle_raw_output.as_slice()),
                 ("toggle_side_conversation", side_toggle_bindings.as_slice()),
                 ("chat.interrupt_turn", self.chat.interrupt_turn.as_slice()),
@@ -1847,6 +1873,7 @@ impl RuntimeKeymap {
                 ("clear_terminal", self.app.clear_terminal.as_slice()),
                 ("toggle_vim_mode", self.app.toggle_vim_mode.as_slice()),
                 ("toggle_fast_mode", self.app.toggle_fast_mode.as_slice()),
+                ("toggle_yolo_mode", self.app.toggle_yolo_mode.as_slice()),
                 ("toggle_raw_output", self.app.toggle_raw_output.as_slice()),
                 ("toggle_side_conversation", side_toggle_bindings.as_slice()),
             ],
@@ -1931,6 +1958,7 @@ impl RuntimeKeymap {
                 ("composer.submit", self.composer.submit.as_slice()),
                 ("toggle_vim_mode", self.app.toggle_vim_mode.as_slice()),
                 ("toggle_fast_mode", self.app.toggle_fast_mode.as_slice()),
+                ("toggle_yolo_mode", self.app.toggle_yolo_mode.as_slice()),
                 ("toggle_raw_output", self.app.toggle_raw_output.as_slice()),
                 ("toggle_side_conversation", side_toggle_bindings.as_slice()),
                 (

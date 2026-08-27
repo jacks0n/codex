@@ -523,7 +523,7 @@ async fn handle_approved_mcp_tool_call(
             Ok(maybe_request_codex_apps_auth_elicitation(
                 sess,
                 turn_context,
-                prepared_call.config().approval_policy.value(),
+                turn_context.approval_policy(),
                 call_id,
                 &invocation.server,
                 Some(&metadata),
@@ -1391,7 +1391,7 @@ async fn maybe_request_mcp_tool_approval(
     );
     if !strict_auto_review
         && mcp_permission_prompt_is_auto_approved(
-            config.approval_policy.value(),
+            turn_context.approval_policy(),
             permission_profile,
             McpPermissionPromptAutoApproveContext {
                 tool_approval_mode: Some(policy.mode),
@@ -1442,7 +1442,7 @@ async fn maybe_request_mcp_tool_approval(
                 read_only_hint: annotations.read_only_hint,
             }),
         hook_tool_name: hook_tool_name.clone(),
-        approval_policy: config.approval_policy.value(),
+        approval_policy: turn_context.approval_policy(),
         reviewer: approvals_reviewer,
         approval_mode: policy.mode,
         allow_session_remember: session_approval_key.is_some(),

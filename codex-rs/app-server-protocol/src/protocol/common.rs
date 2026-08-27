@@ -637,6 +637,12 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadSettingsUpdateResponse,
     },
+    #[experimental("thread/fullAccess/update")]
+    ThreadFullAccessUpdate => "thread/fullAccess/update" {
+        params: v2::ThreadFullAccessUpdateParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadFullAccessUpdateResponse,
+    },
     #[experimental("thread/memoryMode/set")]
     ThreadMemoryModeSet => "thread/memoryMode/set" {
         params: v2::ThreadMemoryModeSetParams,
@@ -1859,6 +1865,8 @@ server_notification_definitions! {
     EnvironmentDisconnected => "thread/environment/disconnected" (v2::EnvironmentConnectionNotification),
     #[experimental("thread/settings/updated")]
     ThreadSettingsUpdated => "thread/settings/updated" (v2::ThreadSettingsUpdatedNotification),
+    #[experimental("thread/fullAccess/updated")]
+    ThreadFullAccessUpdated => "thread/fullAccess/updated" (v2::ThreadFullAccessUpdatedNotification),
     ThreadTokenUsageUpdated => "thread/tokenUsage/updated" (v2::ThreadTokenUsageUpdatedNotification),
     TurnStarted => "turn/started" (v2::TurnStartedNotification),
     HookStarted => "hook/started" (v2::HookStartedNotification),

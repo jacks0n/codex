@@ -782,6 +782,25 @@ pub(crate) struct TurnEnvironmentSnapshot {
 }
 
 impl TurnEnvironmentSnapshot {
+    /// Applies a runtime Full Access profile to thread-owned ready environments.
+    pub(crate) fn with_full_access(mut self) -> Self {
+        self.environments = self
+            .environments
+            .into_iter()
+            .map(|environment| match environment {
+                TurnEnvironmentState::Ready(environment)
+                    if environment.config_origin == EnvironmentConfigOrigin::Thread =>
+                {
+                    TurnEnvironmentState::Ready(
+                        environment.with_permission_profile(PermissionProfile::Disabled),
+                    )
+                }
+                environment => environment,
+            })
+            .collect();
+        self
+    }
+
     /// Promotes completed startup work without adopting newer thread selections.
     pub(crate) fn refresh_readiness(&self) -> Self {
         let environments = self
@@ -838,6 +857,15 @@ impl TurnEnvironmentSnapshot {
 
     pub(crate) fn primary(&self) -> Option<&TurnEnvironment> {
         self.turn_environments().next()
+    }
+
+    pub(crate) fn primary_config_origin(&self) -> Option<EnvironmentConfigOrigin> {
+        self.environments
+            .first()
+            .map(|environment| match environment {
+                TurnEnvironmentState::Ready(environment) => environment.config_origin,
+                TurnEnvironmentState::Starting(environment) => environment.config_origin,
+            })
     }
 
     /// Returns the primary environment's resolved permissions, or the provided fallback.

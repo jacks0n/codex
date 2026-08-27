@@ -4273,6 +4273,21 @@
       "description": "Extra app-server data for a thread.",
       "type": "object"
     },
+    "ThreadFullAccessUpdatedNotification": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "threadId"
+      ],
+      "type": "object"
+    },
     "ThreadGoal": {
       "properties": {
         "createdAt": {
@@ -6991,6 +7006,26 @@
         "params"
       ],
       "title": "Thread/settings/updatedNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "thread/fullAccess/updated"
+          ],
+          "title": "Thread/fullAccess/updatedNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadFullAccessUpdatedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "Thread/fullAccess/updatedNotification",
       "type": "object"
     },
     {
