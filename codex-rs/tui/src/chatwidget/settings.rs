@@ -5,6 +5,14 @@ use crate::app_event::AppEvent;
 use crate::chatwidget::rate_limits::RATE_LIMIT_SWITCH_PROMPT_VIEW_ID;
 
 impl ChatWidget {
+    pub(crate) fn set_yolo_status(&mut self, status: Option<String>) {
+        if self.yolo_status == status {
+            return;
+        }
+        self.yolo_status = status;
+        self.refresh_status_surfaces();
+    }
+
     /// Set the approval policy in the widget's config copy.
     pub(crate) fn set_approval_policy(&mut self, policy: AskForApproval) {
         if let Err(err) = self

@@ -4069,7 +4069,8 @@
               "toggle_raw_output": null,
               "toggle_shortcuts": null,
               "toggle_side_conversation": null,
-              "toggle_vim_mode": null
+              "toggle_vim_mode": null,
+              "toggle_yolo_mode": null
             },
             "list": {
               "accept": null,
@@ -4827,6 +4828,14 @@
             }
           ],
           "description": "Toggle Vim mode for the composer input."
+        },
+        "toggle_yolo_mode": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Toggle Full Access (shown as YOLO) for the current thread and its agents."
         }
       },
       "type": "object"
@@ -4946,7 +4955,8 @@
             "toggle_raw_output": null,
             "toggle_shortcuts": null,
             "toggle_side_conversation": null,
-            "toggle_vim_mode": null
+            "toggle_vim_mode": null,
+            "toggle_yolo_mode": null
           }
         },
         "list": {
