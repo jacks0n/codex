@@ -10,6 +10,7 @@ use codex_exec_server::ExecutorCapabilityDiscoverySnapshot;
 use codex_exec_server::ResolvedSelectedCapabilityRoot;
 use codex_mcp::McpBinding;
 use codex_otel::SessionTelemetry;
+use codex_protocol::protocol::AskForApproval;
 
 /// Request-scoped state that may change between model sampling requests.
 pub(crate) struct StepContext {
@@ -31,4 +32,14 @@ pub(crate) struct StepContext {
     pub(crate) tool_router: Arc<ToolRouter>,
     /// The canonical AGENTS.md value observed with this environment snapshot.
     pub(crate) loaded_agents_md: Option<Arc<LoadedAgentsMd>>,
+}
+
+impl StepContext {
+    pub(crate) fn approval_policy(&self) -> AskForApproval {
+        if self.turn.runtime_full_access.is_enabled() {
+            AskForApproval::Never
+        } else {
+            self.settings.approval_policy()
+        }
+    }
 }

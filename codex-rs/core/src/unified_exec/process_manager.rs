@@ -1385,7 +1385,7 @@ impl UnifiedExecProcessManager {
             .create_exec_approval_requirement_for_shell(
                 ExecApprovalRequest {
                     command: &request.command,
-                    approval_policy: context.step_context.settings.approval_policy(),
+                    approval_policy: context.step_context.approval_policy(),
                     permission_profile: request.turn_environment.permission_profile().clone(),
                     environment_policy: request.turn_environment.config().exec_policy.as_ref(),
                     windows_sandbox_level: request.turn_environment.config().windows_sandbox_level,

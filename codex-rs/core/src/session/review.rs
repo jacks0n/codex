@@ -148,7 +148,7 @@ pub(super) async fn spawn_review_thread(
         use_model_token_budget_defaults: per_turn_config.features.enabled(Feature::TokenBudget)
             && !super::token_budget::has_explicit_settings(&per_turn_config),
         config: per_turn_config,
-        runtime_full_access_enabled: parent_turn_context.runtime_full_access_enabled,
+        runtime_full_access: Arc::clone(&parent_turn_context.runtime_full_access),
         auth_manager: auth_manager_for_context,
         initial_settings: Arc::clone(&step_settings),
         current_settings: ArcSwap::from(step_settings),

@@ -150,7 +150,7 @@ pub(crate) async fn prepare_unified_exec_zsh_fork(
         environment_id: req.turn_environment.selection.environment_id.clone(),
         source: GuardianCommandSource::UnifiedExec,
         tool_name: ctx.tool_name.clone(),
-        approval_policy: ctx.step_context.settings.approval_policy(),
+        approval_policy: ctx.step_context.approval_policy(),
         permission_profile: exec_request.permission_profile.clone(),
         sandbox_permissions: req.sandbox_permissions,
         approval_sandbox_permissions: approval_sandbox_permissions(

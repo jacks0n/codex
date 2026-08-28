@@ -6426,11 +6426,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
             Arc::new(model_info),
             config.features.enabled(Feature::FastMode),
         )),
-        session
-            .services
-            .agent_control
-            .runtime_full_access()
-            .is_enabled(),
+        session.services.agent_control.runtime_full_access(),
         &models_manager,
         /*network*/ None,
         resolved_turn_environments,
@@ -8710,11 +8706,7 @@ where
             Arc::new(model_info),
             config.features.enabled(Feature::FastMode),
         )),
-        session
-            .services
-            .agent_control
-            .runtime_full_access()
-            .is_enabled(),
+        session.services.agent_control.runtime_full_access(),
         &models_manager,
         /*network*/ None,
         resolved_turn_environments,

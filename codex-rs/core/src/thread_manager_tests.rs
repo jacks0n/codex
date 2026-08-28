@@ -82,6 +82,7 @@ async fn full_access_override_is_shared_with_existing_and_future_subagents() {
         .start_thread(StartThreadOptions::new(config.clone()))
         .await
         .expect("start root thread");
+    let root_existing_turn = root.thread.session.new_default_turn().await;
 
     manager
         .set_agent_tree_full_access(root.thread_id, true)
@@ -121,12 +122,16 @@ async fn full_access_override_is_shared_with_existing_and_future_subagents() {
 
     assert_eq!(
         (
+            root_existing_turn.approval_policy(),
+            root_existing_turn.permission_profile(),
             root_yolo_turn.approval_policy(),
             root_yolo_turn.permission_profile(),
             child_yolo_turn.approval_policy(),
             child_yolo_turn.permission_profile(),
         ),
         (
+            AskForApproval::Never,
+            PermissionProfile::Disabled,
             AskForApproval::Never,
             PermissionProfile::Disabled,
             AskForApproval::Never,
@@ -169,6 +174,8 @@ async fn full_access_override_is_shared_with_existing_and_future_subagents() {
     );
     assert_eq!(
         (
+            root_existing_turn.approval_policy(),
+            root_existing_turn.permission_profile(),
             root_yolo_turn.approval_policy(),
             root_yolo_turn.permission_profile(),
             root_restored_turn.approval_policy(),
@@ -177,8 +184,10 @@ async fn full_access_override_is_shared_with_existing_and_future_subagents() {
             child_restored_turn.permission_profile(),
         ),
         (
-            AskForApproval::Never,
-            PermissionProfile::Disabled,
+            configured_approval,
+            configured_profile.clone(),
+            configured_approval,
+            configured_profile.clone(),
             configured_approval,
             configured_profile.clone(),
             configured_approval,

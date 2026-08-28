@@ -161,7 +161,7 @@ impl Session {
             let model_messages = turn_context.model_info().model_messages.as_ref();
             world_state.add_section(PermissionsState::new(
                 &permission_profile,
-                step_context.settings.approval_policy(),
+                step_context.approval_policy(),
                 ApprovalPromptContext::new(
                     step_context.settings.approvals_reviewer(),
                     model_messages.and_then(|messages| messages.approvals.as_ref()),
