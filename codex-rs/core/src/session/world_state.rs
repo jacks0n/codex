@@ -145,8 +145,11 @@ impl Session {
                 .unwrap_or_else(|| turn_context.cwd.clone());
             world_state.add_section(PermissionsState::new(
                 &permission_profile,
-                settings.approval_policy(),
-                ApprovalPromptContext::new(settings.approvals_reviewer(), model_messages),
+                step_context.approval_policy(),
+                ApprovalPromptContext::new(
+                    step_context.settings.approvals_reviewer(),
+                    model_messages,
+                ),
                 exec_policy.as_ref(),
                 &cwd,
                 turn_context

@@ -13,6 +13,7 @@ use codex_exec_server::ResolvedSelectedCapabilityRoot;
 use codex_mcp::McpBinding;
 use codex_otel::SessionTelemetry;
 use codex_protocol::items::ModelInvocationContext;
+use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::TurnContextItem;
 
 /// Inputs for the next step, published together so capture cannot mix versions.
@@ -60,6 +61,14 @@ impl StepContext {
                 .settings
                 .effective_reasoning_effort()
                 .map(|effort| effort.to_string()),
+        }
+    }
+
+    pub(crate) fn approval_policy(&self) -> AskForApproval {
+        if self.turn.runtime_full_access.is_enabled() {
+            AskForApproval::Never
+        } else {
+            self.settings.approval_policy()
         }
     }
 }
