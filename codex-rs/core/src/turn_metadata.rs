@@ -25,6 +25,7 @@ use crate::responses_metadata::subagent_header_value;
 use crate::responses_metadata::subagent_metadata_kind;
 use crate::sandbox_tags::SandboxTags;
 use crate::sandbox_tags::record_policy_metadata;
+use crate::session::step_context::StepContext;
 use crate::session::step_settings::ResolvedStepSettings;
 use codex_file_system::WindowsSandboxSelection;
 use codex_git_utils::SanitizedGitUrl;
@@ -37,6 +38,7 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::SessionSource;
+use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::ThreadSource;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_git_discovery::GitRootDiscovery;
@@ -61,12 +63,26 @@ pub(crate) struct ExecutionMetadata<'a> {
 
 impl<'a> ExecutionMetadata<'a> {
     pub(crate) fn from_settings(settings: &'a ResolvedStepSettings) -> Self {
+        Self::from_settings_and_approval_policy(settings, settings.approval_policy())
+    }
+
+    pub(crate) fn from_step_context(step_context: &'a StepContext) -> Self {
+        Self::from_settings_and_approval_policy(
+            &step_context.settings,
+            step_context.approval_policy(),
+        )
+    }
+
+    fn from_settings_and_approval_policy(
+        settings: &'a ResolvedStepSettings,
+        approval_policy: AskForApproval,
+    ) -> Self {
         Self {
             model: settings.model_info.slug.as_str(),
             reasoning_effort: settings.effective_reasoning_effort(),
             node_repl_disabled: settings.model_info.node_repl_disabled,
             auto_review_enabled: crate::guardian::routes_approval_policy_to_guardian(
-                settings.approval_policy(),
+                approval_policy,
                 settings.approvals_reviewer(),
             ),
             node_repl_auto_review_required: settings.model_info.computer_use_review_required(),

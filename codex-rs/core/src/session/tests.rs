@@ -6810,8 +6810,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         session
             .services
             .local_agent_runtime
-            .runtime_full_access()
-            .is_enabled(),
+            .runtime_full_access(),
         &models_manager,
         /*network*/ None,
         resolved_turn_environments,
@@ -9091,8 +9090,7 @@ where
         session
             .services
             .local_agent_runtime
-            .runtime_full_access()
-            .is_enabled(),
+            .runtime_full_access(),
         &models_manager,
         /*network*/ None,
         resolved_turn_environments,

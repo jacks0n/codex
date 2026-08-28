@@ -668,7 +668,7 @@ impl Session {
             window_id,
             request_kind,
         );
-        ExecutionMetadata::from_settings(&step_context.settings).apply_to(&mut responses_metadata);
+        ExecutionMetadata::from_step_context(step_context).apply_to(&mut responses_metadata);
         responses_metadata.tool_namespaces_info = if step_context
             .turn
             .config

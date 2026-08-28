@@ -1326,9 +1326,7 @@ fn build_mcp_tool_call_request_meta(
     if let Some(turn_metadata) = step_context
         .turn
         .turn_metadata_state
-        .current_meta_value_for_mcp_request(ExecutionMetadata::from_settings(
-            &step_context.settings,
-        ))
+        .current_meta_value_for_mcp_request(ExecutionMetadata::from_step_context(step_context))
     {
         request_meta.insert(
             crate::X_CODEX_TURN_METADATA_HEADER.to_string(),

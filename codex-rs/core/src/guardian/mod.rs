@@ -121,7 +121,11 @@ impl GuardianReviewContext {
             reasoning_effort: settings.reasoning_effort().cloned(),
             reasoning_summary: settings.reasoning_summary,
             personality: settings.personality(),
-            approval_policy: settings.approval_policy(),
+            approval_policy: if turn.runtime_full_access.is_enabled() {
+                AskForApproval::Never
+            } else {
+                settings.approval_policy()
+            },
             approvals_reviewer: settings.approvals_reviewer(),
             turn,
         }
@@ -150,7 +154,7 @@ impl From<&Arc<StepContext>> for GuardianReviewContext {
             reasoning_effort: step.settings.reasoning_effort().cloned(),
             reasoning_summary: step.settings.reasoning_summary,
             personality: step.settings.personality(),
-            approval_policy: step.settings.approval_policy(),
+            approval_policy: step.approval_policy(),
             approvals_reviewer: step.settings.approvals_reviewer(),
         }
     }

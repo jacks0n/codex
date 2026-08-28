@@ -2941,7 +2941,7 @@ impl Session {
         cancellation_token: CancellationToken,
     ) -> Option<RequestPermissionsResponse> {
         let turn_context = &step_context.turn;
-        let approval_policy = step_context.settings.approval_policy();
+        let approval_policy = step_context.approval_policy();
         let Some(environment) = step_context
             .environments
             .turn_environments()
@@ -3839,7 +3839,7 @@ impl Session {
         );
         let session_telemetry = settings.telemetry(&turn_context.session_telemetry);
         let environments = environments.or_cancel(cancellation_token).await?;
-        let environments = if turn_context.runtime_full_access_enabled {
+        let environments = if turn_context.runtime_full_access.is_enabled() {
             environments.with_full_access()
         } else {
             environments
