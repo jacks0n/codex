@@ -1636,6 +1636,7 @@ mod tests {
         let (tx, _rx) = unbounded_channel::<AppEvent>();
         let view = make_overlay(
             ApprovalRequest::Exec(ExecApprovalRequest {
+                kind: Default::default(),
                 thread_id: ThreadId::new(),
                 thread_label: Some("Agent".to_string()),
                 id: "test".to_string(),
