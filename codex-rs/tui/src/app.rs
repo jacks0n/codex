@@ -201,6 +201,8 @@ use tokio::sync::mpsc::unbounded_channel;
 use tokio::task::JoinHandle;
 use toml::Value as TomlValue;
 use uuid::Uuid;
+
+const TUI_EXIT_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 mod agent_message_consolidation;
 mod agent_navigation;
 mod agent_picker;

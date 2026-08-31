@@ -108,8 +108,12 @@ impl App {
             app_server: AppServerSession,
             error: impl Into<color_eyre::eyre::Report>,
         ) -> Result<AppExitInfo> {
-            if let Err(shutdown_error) = app_server.shutdown().await {
-                tracing::warn!("app-server shutdown failed: {shutdown_error}");
+            match tokio::time::timeout(TUI_EXIT_SHUTDOWN_TIMEOUT, app_server.shutdown()).await {
+                Ok(Ok(())) => {}
+                Ok(Err(shutdown_error)) => {
+                    tracing::warn!("app-server shutdown failed: {shutdown_error}");
+                }
+                Err(_) => tracing::warn!("timed out waiting for app-server shutdown"),
             }
             Err(error.into())
         }
@@ -868,8 +872,12 @@ See the Codex keymap documentation for supported actions and examples."
                 }
             }
         };
-        if let Err(err) = app_server.shutdown().await {
-            tracing::warn!(error = %err, "failed to shut down embedded app server");
+        match tokio::time::timeout(TUI_EXIT_SHUTDOWN_TIMEOUT, app_server.shutdown()).await {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                tracing::warn!(error = %err, "failed to shut down embedded app server");
+            }
+            Err(_) => tracing::warn!("timed out waiting for embedded app-server shutdown"),
         }
         let clear_pet_result = tui.clear_ambient_pet_image();
         let clear_result = tui.terminal.clear();
