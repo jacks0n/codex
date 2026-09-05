@@ -2579,6 +2579,7 @@ fn completed_legacy_event_history_is_not_mid_turn() {
             phase: None,
             memory_citation: None,
             delivery: None,
+            questions: None,
         })),
     ]);
 

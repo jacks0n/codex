@@ -26,6 +26,7 @@ use crate::thread_manager::ThreadManagerState;
 use crate::thread_manager::default_thread_id_generator;
 use crate::thread_rollout_truncation::truncate_rollout_to_last_n_fork_turns;
 use crate::turn_timing::now_unix_timestamp_ms;
+use arc_swap::ArcSwapOption;
 use codex_history::InitialHistory;
 use codex_history::ResumedHistory;
 use codex_history::RolloutItem;
@@ -73,6 +74,7 @@ use self::residency::V2Residency;
 mod execution;
 mod legacy;
 mod residency;
+mod service_tier;
 mod spawn;
 mod user_authorization;
 
@@ -115,8 +117,7 @@ pub(crate) struct ListedAgent {
 /// which keeps the registry scoped to that root thread rather than the entire `ThreadManager`.
 #[derive(Clone)]
 pub(crate) struct AgentControl {
-    /// ID shared by the whole agent control session. This means every sub-agents from a common
-    /// root share the same session ID.
+    /// session_id is equal to the root thread's ID.
     session_id: SessionId,
     /// Weak handle back to the global thread registry/state.
     /// This is `Weak` to avoid reference cycles and shadow persistence of the form
@@ -131,6 +132,8 @@ pub(crate) struct AgentControl {
     rollout_budget: Arc<RolloutBudget>,
     /// Runtime-only Full Access override shared by the root and all descendants.
     full_access: Arc<RuntimeFullAccessState>,
+    /// The user-selected root routing tier, shared by the entire agent tree.
+    root_service_tier: Arc<ArcSwapOption<String>>,
 }
 
 impl Default for AgentControl {
@@ -159,6 +162,7 @@ impl AgentControl {
             agent_execution_limiter: Arc::default(),
             rollout_budget: Arc::default(),
             full_access: Arc::default(),
+            root_service_tier: Arc::new(ArcSwapOption::from(None)),
         };
         if let Some(rollout_budget) = rollout_budget {
             control.rollout_budget.configure(rollout_budget);
