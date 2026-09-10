@@ -164,14 +164,6 @@ impl TurnEnvironment {
         self.config_origin
             .into_input_selection(self.selection.clone())
     }
-
-    pub(crate) fn with_permission_profile(mut self, permission_profile: PermissionProfile) -> Self {
-        let EnvironmentConfigState::Ready(config) = &mut self.selection.config else {
-            unreachable!("ready turn environments always carry resolved configuration")
-        };
-        config.permission_profile = PermissionProfileSnapshot::legacy(permission_profile);
-        self
-    }
 }
 
 impl std::fmt::Debug for TurnEnvironment {
@@ -1019,6 +1011,17 @@ impl Session {
             .plugins_manager
             .plugins_for_config(&plugins_input)
             .await;
+        // Cache changes from another process do not notify this session's hook runtime.
+        if !self.hooks().matches_plugin_hooks(
+            plugin_outcome.iter_effective_plugin_hook_sources(),
+            plugin_outcome.iter_effective_plugin_hook_warnings(),
+        ) {
+            // Keep the refresh state out of the enclosing turn-construction future.
+            Box::pin(self.refresh_hooks(Arc::clone(
+                &session_configuration.original_config_do_not_use,
+            )))
+            .await;
+        }
         let trusted_plugin_roots = TrustedPluginRoots::from_plugin_load_outcome(
             &plugin_outcome,
             per_turn_config.codex_home.as_path(),

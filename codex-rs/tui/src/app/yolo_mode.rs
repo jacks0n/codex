@@ -1,4 +1,4 @@
-//! TUI control for the runtime Full Access override displayed as YOLO.
+//! TUI control for the runtime Full Access override.
 
 use super::App;
 use crate::app_server_session::AppServerSession;
@@ -54,6 +54,6 @@ impl App {
         let enabled = self.yolo_mode.override_enabled
             || history_cell::is_yolo_mode(self.chat_widget.config_ref());
         self.chat_widget
-            .set_yolo_status(enabled.then(|| "YOLO".to_string()));
+            .set_yolo_status(enabled.then(|| "Full Access".to_string()));
     }
 }

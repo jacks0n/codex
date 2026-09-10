@@ -16,7 +16,7 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 > restore Codex's removed safe-command classifier: agentperm decides which commands may run,
 > while unmatched commands are presented for user approval. Agentperm installation alone does not
 > select this behavior; set `approval_policy = "untrusted"` in `~/.codex/config.toml`. This fork also
-> carries an agent-tree-wide TUI YOLO toggle. **OpenAI maintainers: do not merge this branch or its
+> carries an agent-tree-wide TUI Full Access toggle. **OpenAI maintainers: do not merge this branch or its
 > pull request upstream.** These compatibility changes are intentionally maintained for this fork.
 
 ## Quickstart

@@ -787,25 +787,6 @@ pub(crate) struct TurnEnvironmentSnapshot {
 }
 
 impl TurnEnvironmentSnapshot {
-    /// Applies a runtime Full Access profile to thread-owned ready environments.
-    pub(crate) fn with_full_access(mut self) -> Self {
-        self.environments = self
-            .environments
-            .into_iter()
-            .map(|environment| match environment {
-                TurnEnvironmentState::Ready(environment)
-                    if environment.config_origin == EnvironmentConfigOrigin::Thread =>
-                {
-                    TurnEnvironmentState::Ready(
-                        environment.with_permission_profile(PermissionProfile::Disabled),
-                    )
-                }
-                environment => environment,
-            })
-            .collect();
-        self
-    }
-
     pub(crate) fn has_full_access(
         &self,
         approval_policy: AskForApproval,
@@ -2039,58 +2020,5 @@ url = "ws://127.0.0.1:8765"
         };
 
         assert_eq!(snapshot.local_environment_cwd(), Some(cwd));
-    }
-
-    #[tokio::test]
-    async fn full_access_only_disables_thread_owned_environment_permissions() {
-        let cwd = AbsolutePathBuf::current_dir().expect("cwd");
-        let environment = Arc::new(Environment::create_for_tests(None).expect("environment"));
-        let thread_config = EnvironmentConfig {
-            permission_profile: PermissionProfileSnapshot::legacy(
-                PermissionProfile::workspace_write(),
-            ),
-            ..test_environment_config()
-        };
-        let owner_config = test_environment_config();
-        let ready_environment =
-            |environment_id: &str,
-             config: EnvironmentConfig,
-             config_origin: EnvironmentConfigOrigin| {
-                TurnEnvironmentState::Ready(TurnEnvironment::new(
-                    TurnEnvironmentSelection {
-                        environment_id: environment_id.to_string(),
-                        cwd: PathUri::from_abs_path(&cwd),
-                        workspace_roots: Vec::new(),
-                        config: EnvironmentConfigState::Ready(config),
-                    },
-                    config_origin,
-                    Arc::clone(&environment),
-                    /*shell*/ None,
-                ))
-            };
-        let snapshot = TurnEnvironmentSnapshot {
-            environments: vec![
-                ready_environment(
-                    "thread-owned",
-                    thread_config.clone(),
-                    EnvironmentConfigOrigin::Thread,
-                ),
-                ready_environment(
-                    "owner-provided",
-                    owner_config.clone(),
-                    EnvironmentConfigOrigin::Owner,
-                ),
-            ],
-        };
-        let mut expected_thread_config = thread_config;
-        expected_thread_config.permission_profile =
-            PermissionProfileSnapshot::legacy(PermissionProfile::Disabled);
-
-        let actual_configs = snapshot
-            .with_full_access()
-            .turn_environments()
-            .map(|environment| environment.config().clone())
-            .collect::<Vec<_>>();
-        assert_eq!(actual_configs, vec![expected_thread_config, owner_config]);
     }
 }

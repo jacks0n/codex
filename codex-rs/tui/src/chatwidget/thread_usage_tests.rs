@@ -68,12 +68,21 @@ fn estimated_cost_formats_dollars_and_sub_cent_values() {
 }
 
 #[tokio::test]
-async fn yolo_status_line_item_displays_full_access_state() {
+async fn permissions_status_line_item_displays_runtime_full_access_state() {
     let (mut chat, _sender, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
-    chat.config.tui_status_line = Some(vec!["yolo-mode".to_string()]);
-    chat.set_yolo_status(Some("YOLO".to_string()));
+    chat.local_settings.tui.status_line = Some(vec!["permissions".to_string()]);
+    chat.set_yolo_status(Some("Full Access".to_string()));
 
-    insta::assert_snapshot!(chat.status_line_text().unwrap_or_default(), @"YOLO");
+    insta::assert_snapshot!(chat.status_line_text().unwrap_or_default(), @"Full Access");
+}
+
+#[tokio::test]
+async fn legacy_yolo_status_line_item_displays_runtime_full_access_state() {
+    let (mut chat, _sender, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
+    chat.local_settings.tui.status_line = Some(vec!["yolo-mode".to_string()]);
+    chat.set_yolo_status(Some("Full Access".to_string()));
+
+    insta::assert_snapshot!(chat.status_line_text().unwrap_or_default(), @"Full Access");
 }
 
 #[tokio::test]
@@ -83,7 +92,7 @@ async fn temporary_thread_usage_failures_have_bounded_retries() {
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.config.tui_status_line = Some(vec!["estimated-thread-cost".to_string()]);
+    chat.local_settings.tui.status_line = Some(vec!["estimated-thread-cost".to_string()]);
     chat.refresh_status_line();
 
     for attempt in 0..=THREAD_USAGE_RETRY_DELAYS.len() {
@@ -115,7 +124,7 @@ async fn status_history_survives_exhausted_billing_retries() {
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.config.tui_status_line = Some(vec!["estimated-thread-cost".to_string()]);
+    chat.local_settings.tui.status_line = Some(vec!["estimated-thread-cost".to_string()]);
     chat.refresh_status_line();
     let mut request_id = thread_usage_request_id(&mut rx);
 
@@ -185,7 +194,7 @@ async fn status_history_updates_again_after_billing_settles() {
         chat.thread_id = Some(thread_id);
         chat.has_codex_backend_auth = true;
         chat.plan_type = Some(PlanType::Business);
-        chat.config.tui_status_line = Some(vec![selected_item.to_string()]);
+        chat.local_settings.tui.status_line = Some(vec![selected_item.to_string()]);
         chat.refresh_status_line();
         let request_id = thread_usage_request_id(&mut rx);
         assert!(chat.finish_thread_usage_refresh(
@@ -267,7 +276,7 @@ async fn replayed_turn_completions_do_not_start_live_billing_refreshes() {
             chat.thread_id = Some(thread_id);
             chat.has_codex_backend_auth = true;
             chat.plan_type = Some(PlanType::Business);
-            chat.config.tui_status_line = Some(vec!["estimated-thread-cost".to_string()]);
+            chat.local_settings.tui.status_line = Some(vec!["estimated-thread-cost".to_string()]);
             chat.refresh_status_line();
             let request_id = thread_usage_request_id(&mut rx);
             assert!(chat.finish_thread_usage_refresh(
@@ -318,7 +327,7 @@ async fn replayed_errors_do_not_start_live_billing_refreshes() {
         chat.thread_id = Some(thread_id);
         chat.has_codex_backend_auth = true;
         chat.plan_type = Some(PlanType::Business);
-        chat.config.tui_status_line = Some(vec!["estimated-thread-cost".to_string()]);
+        chat.local_settings.tui.status_line = Some(vec!["estimated-thread-cost".to_string()]);
         chat.refresh_status_line();
         let request_id = thread_usage_request_id(&mut rx);
         assert!(chat.finish_thread_usage_refresh(
@@ -366,11 +375,11 @@ async fn transient_zero_cost_preserves_fresh_credits_and_breakdowns() {
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.config.tui_status_line = Some(vec![
+    chat.local_settings.tui.status_line = Some(vec![
         "thread-credits".to_string(),
         "estimated-thread-cost".to_string(),
     ]);
-    chat.config.tui_terminal_title = chat.config.tui_status_line.clone();
+    chat.local_settings.tui.terminal_title = chat.local_settings.tui.status_line.clone();
     chat.refresh_status_surfaces();
     let request_id = thread_usage_request_id(&mut rx);
     assert!(chat.finish_thread_usage_refresh(
@@ -434,8 +443,8 @@ async fn transient_zero_credits_preserves_credits_only_estimates() {
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.config.tui_status_line = Some(vec!["thread-credits".to_string()]);
-    chat.config.tui_terminal_title = chat.config.tui_status_line.clone();
+    chat.local_settings.tui.status_line = Some(vec!["thread-credits".to_string()]);
+    chat.local_settings.tui.terminal_title = chat.local_settings.tui.status_line.clone();
     chat.refresh_status_surfaces();
     let request_id = thread_usage_request_id(&mut rx);
     let previous_usage = ThreadUsage {
@@ -490,7 +499,7 @@ async fn cost_settlement_waits_for_new_or_missing_usd_estimates() {
         chat.thread_id = Some(thread_id);
         chat.has_codex_backend_auth = true;
         chat.plan_type = Some(PlanType::Business);
-        chat.config.tui_status_line = Some(vec!["estimated-thread-cost".to_string()]);
+        chat.local_settings.tui.status_line = Some(vec!["estimated-thread-cost".to_string()]);
         chat.refresh_status_line();
         let request_id = thread_usage_request_id(&mut rx);
         assert!(chat.finish_thread_usage_refresh(
@@ -551,7 +560,7 @@ async fn credits_only_settlement_completes_without_usd_estimates() {
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.config.tui_terminal_title = Some(vec!["thread-credits".to_string()]);
+    chat.local_settings.tui.terminal_title = Some(vec!["thread-credits".to_string()]);
     chat.refresh_terminal_title();
     let request_id = thread_usage_request_id(&mut rx);
     assert!(chat.finish_thread_usage_refresh(
@@ -591,8 +600,8 @@ async fn combined_billing_surfaces_wait_for_credits_and_cost() {
         chat.thread_id = Some(thread_id);
         chat.has_codex_backend_auth = true;
         chat.plan_type = Some(PlanType::Business);
-        chat.config.tui_status_line = Some(vec![status_line_item.to_string()]);
-        chat.config.tui_terminal_title = Some(vec![title_item.to_string()]);
+        chat.local_settings.tui.status_line = Some(vec![status_line_item.to_string()]);
+        chat.local_settings.tui.terminal_title = Some(vec![title_item.to_string()]);
         chat.refresh_status_surfaces();
         let request_id = thread_usage_request_id(&mut rx);
         assert!(chat.finish_thread_usage_refresh(
@@ -649,11 +658,11 @@ async fn billing_surfaces_render_for_every_supported_enterprise_plan() {
         chat.thread_id = Some(thread_id);
         chat.has_codex_backend_auth = true;
         chat.plan_type = Some(plan_type);
-        chat.config.tui_status_line = Some(vec![
+        chat.local_settings.tui.status_line = Some(vec![
             "thread-credits".to_string(),
             "estimated-thread-cost".to_string(),
         ]);
-        chat.config.tui_terminal_title = chat.config.tui_status_line.clone();
+        chat.local_settings.tui.terminal_title = chat.local_settings.tui.status_line.clone();
         chat.refresh_status_surfaces();
         let request_id = thread_usage_request_id(&mut rx);
         assert!(chat.finish_thread_usage_refresh(
@@ -685,7 +694,7 @@ async fn early_draw_rearms_thread_usage_retry_after_immediate_redraw() {
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.config.tui_status_line = Some(vec!["estimated-thread-cost".to_string()]);
+    chat.local_settings.tui.status_line = Some(vec!["estimated-thread-cost".to_string()]);
     chat.refresh_status_line();
 
     let request_id = match rx.try_recv() {
@@ -723,7 +732,7 @@ async fn unchanged_thread_usage_has_bounded_settlement_refreshes() {
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.config.tui_status_line = Some(vec!["estimated-thread-cost".to_string()]);
+    chat.local_settings.tui.status_line = Some(vec!["estimated-thread-cost".to_string()]);
     chat.refresh_status_line();
 
     let initial_request_id = match rx.try_recv() {
@@ -781,7 +790,7 @@ async fn early_draw_rearms_thread_usage_settlement_after_immediate_redraw() {
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.config.tui_status_line = Some(vec!["estimated-thread-cost".to_string()]);
+    chat.local_settings.tui.status_line = Some(vec!["estimated-thread-cost".to_string()]);
     chat.refresh_status_line();
 
     let initial_request_id = match rx.try_recv() {
@@ -843,7 +852,7 @@ async fn thread_usage_settlement_requires_request_started_after_turn_completion(
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.config.tui_status_line = Some(vec!["estimated-thread-cost".to_string()]);
+    chat.local_settings.tui.status_line = Some(vec!["estimated-thread-cost".to_string()]);
     chat.refresh_status_line();
 
     let initial_request_id = match rx.try_recv() {
@@ -933,8 +942,8 @@ async fn deselecting_billing_surfaces_cancels_polling_and_preserves_status_cache
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.config.tui_status_line = Some(vec!["estimated-thread-cost".to_string()]);
-    chat.config.tui_terminal_title = Some(vec!["thread-credits".to_string()]);
+    chat.local_settings.tui.status_line = Some(vec!["estimated-thread-cost".to_string()]);
+    chat.local_settings.tui.terminal_title = Some(vec!["thread-credits".to_string()]);
     chat.refresh_status_surfaces();
 
     let initial_request_id = match rx.try_recv() {
@@ -974,8 +983,8 @@ async fn deselecting_billing_surfaces_cancels_polling_and_preserves_status_cache
     };
     assert!(chat.thread_usage.settlement_refresh_due_at.is_some());
 
-    chat.config.tui_status_line = Some(Vec::new());
-    chat.config.tui_terminal_title = Some(Vec::new());
+    chat.local_settings.tui.status_line = Some(Vec::new());
+    chat.local_settings.tui.terminal_title = Some(Vec::new());
     chat.refresh_status_surfaces();
 
     assert!(!chat.thread_usage.status_requested);
