@@ -1426,6 +1426,7 @@ impl App {
                 self.chat_widget.handle_prompt_edit_thread_session(session);
             }
         }
+        self.refresh_yolo_status();
         let should_buffer_initial_replay = !turns.is_empty();
         if should_buffer_initial_replay {
             self.app_event_tx

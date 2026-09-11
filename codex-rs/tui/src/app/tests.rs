@@ -57,6 +57,8 @@ mod thread_usage;
 mod transcript_composer;
 #[path = "tests/turn_submission.rs"]
 mod turn_submission;
+#[path = "tests/yolo_mode_tests.rs"]
+mod yolo_mode_tests;
 
 use super::*;
 use crate::app_backtrack::BacktrackSelection;

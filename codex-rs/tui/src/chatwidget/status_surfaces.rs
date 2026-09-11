@@ -1211,7 +1211,9 @@ fn permissions_display(config: &Config) -> String {
     {
         return "Workspace".to_string();
     }
-    if permission_profile == PermissionProfile::Disabled {
+    if permission_profile == PermissionProfile::Disabled
+        && AskForApproval::from(config.permissions.approval_policy.value()) == AskForApproval::Never
+    {
         return "Full Access".to_string();
     }
 
