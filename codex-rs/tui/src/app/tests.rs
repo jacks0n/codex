@@ -94,6 +94,8 @@ mod turn_submission;
 mod user_verification_routes;
 #[path = "tests/worktree_background_terminals_tests.rs"]
 mod worktree_background_terminals_tests;
+#[path = "tests/yolo_mode_tests.rs"]
+mod yolo_mode_tests;
 
 use super::*;
 use crate::app_backtrack::BacktrackSelection;

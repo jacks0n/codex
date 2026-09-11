@@ -1581,6 +1581,7 @@ impl App {
                 self.chat_widget.handle_thread_session(session);
             }
         }
+        self.refresh_yolo_status();
         let should_buffer_initial_replay = !turns.is_empty();
         let replayed_final_items = realtime_delivery::completed_agent_items_from_turns(&turns);
         let replayed_voice_texts = realtime_delivery::replayed_voice_texts_from_turns(&turns);
