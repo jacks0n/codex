@@ -7,5 +7,5 @@ expression: "render_lines(&lines).join(\"\\n\")"
 │                                          │
 │ model:       gpt-5.6-sol xhigh   fast  … │
 │ directory:   project                     │
-│ permissions: YOLO mode                   │
+│ permissions: Full Access                 │
 ╰──────────────────────────────────────────╯

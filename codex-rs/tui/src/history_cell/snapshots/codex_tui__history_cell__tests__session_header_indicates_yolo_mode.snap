@@ -1,5 +1,5 @@
 ---
-source: tui/src/history_cell.rs
+source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
 ╭───────────────────────────────────────╮
@@ -7,5 +7,5 @@ expression: rendered
 │                                       │
 │ model:       gpt-5   /model to change │
 │ directory:   /tmp/project             │
-│ permissions: YOLO mode                │
+│ permissions: Full Access              │
 ╰───────────────────────────────────────╯

@@ -344,7 +344,7 @@ impl ExecCommandHandler {
 
         // Sticky turn permissions have already been approved, so they should
         // continue through the normal exec approval flow for the command.
-        let approval_policy = context.step_context.settings.approval_policy();
+        let approval_policy = context.step_context.approval_policy();
         if effective_additional_permissions
             .sandbox_permissions
             .requests_sandbox_override()

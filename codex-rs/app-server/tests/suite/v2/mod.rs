@@ -102,6 +102,7 @@ mod thread_archive;
 mod thread_delete;
 mod thread_environments;
 mod thread_fork;
+mod thread_full_access;
 mod thread_inject_items;
 mod thread_list;
 mod thread_loaded_list;

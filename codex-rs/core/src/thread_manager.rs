@@ -2,6 +2,7 @@ use crate::CodexAppsToolsCache;
 use crate::agent::AgentControl;
 use crate::attestation::AttestationProvider;
 use crate::codex_thread::CodexThread;
+use crate::codex_thread::CodexThreadSettingsOverrides;
 use crate::config::Config;
 use crate::config::ThreadStoreConfig;
 use crate::current_time::TimeProvider;
@@ -49,12 +50,15 @@ use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_models_manager::manager::RefreshStrategy;
 use codex_models_manager::manager::SharedModelsManager;
 use codex_protocol::ThreadId;
+use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::mcp::ClientMcpExtensions;
 use codex_protocol::mcp::OPENAI_STANDARD_FORM_INPUT_EXTENSION_ID;
+use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ModelPreset;
+use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InternalSessionSource;
@@ -954,6 +958,44 @@ impl ThreadManager {
 
     pub async fn start_thread(&self, options: StartThreadOptions) -> CodexResult<NewThread> {
         Box::pin(self.start_thread_inner(options, /*forked_from_thread_id*/ None)).await
+    }
+
+    /// Returns whether the thread's agent tree is using the runtime Full Access override.
+    pub async fn agent_tree_full_access(&self, thread_id: ThreadId) -> CodexResult<bool> {
+        let thread = self.get_thread(thread_id).await?;
+        Ok(thread
+            .session
+            .services
+            .agent_control
+            .runtime_full_access()
+            .is_enabled())
+    }
+
+    /// Changes the Full Access override for the thread and all of its agents.
+    pub async fn set_agent_tree_full_access(
+        &self,
+        thread_id: ThreadId,
+        enabled: bool,
+    ) -> CodexResult<()> {
+        let thread = self.get_thread(thread_id).await?;
+        if enabled {
+            thread
+                .preview_thread_settings_overrides(CodexThreadSettingsOverrides {
+                    approval_policy: Some(AskForApproval::Never),
+                    approvals_reviewer: Some(ApprovalsReviewer::User),
+                    permission_profile: Some(PermissionProfile::Disabled),
+                    ..Default::default()
+                })
+                .await
+                .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
+        }
+        thread
+            .session
+            .services
+            .agent_control
+            .runtime_full_access()
+            .set_enabled(enabled);
+        Ok(())
     }
 
     /// Starts a fresh internal session associated with an existing parent thread.

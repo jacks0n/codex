@@ -98,6 +98,11 @@ impl GuardianReviewContext {
         turn: Arc<TurnContext>,
         settings: &ResolvedStepSettings,
     ) -> Self {
+        let approval_policy = if turn.runtime_full_access.is_enabled() {
+            AskForApproval::Never
+        } else {
+            settings.approval_policy()
+        };
         Self {
             parent_response_id: turn
                 .extension_data
@@ -107,7 +112,7 @@ impl GuardianReviewContext {
             model_info: Arc::clone(&settings.model_info),
             reasoning_effort: settings.reasoning_effort().cloned(),
             reasoning_summary: settings.reasoning_summary,
-            approval_policy: settings.approval_policy(),
+            approval_policy,
             approvals_reviewer: settings.approvals_reviewer(),
             turn,
         }
@@ -135,7 +140,7 @@ impl From<&Arc<StepContext>> for GuardianReviewContext {
             model_info: Arc::clone(&step.settings.model_info),
             reasoning_effort: step.settings.reasoning_effort().cloned(),
             reasoning_summary: step.settings.reasoning_summary,
-            approval_policy: step.settings.approval_policy(),
+            approval_policy: step.approval_policy(),
             approvals_reviewer: step.settings.approvals_reviewer(),
         }
     }

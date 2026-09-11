@@ -68,6 +68,24 @@ fn estimated_cost_formats_dollars_and_sub_cent_values() {
 }
 
 #[tokio::test]
+async fn permissions_status_line_item_displays_runtime_full_access_state() {
+    let (mut chat, _sender, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
+    chat.local_settings.tui.status_line = Some(vec!["permissions".to_string()]);
+    chat.set_yolo_status(Some("Full Access".to_string()));
+
+    insta::assert_snapshot!(chat.status_line_text().unwrap_or_default(), @"Full Access");
+}
+
+#[tokio::test]
+async fn legacy_yolo_status_line_item_displays_runtime_full_access_state() {
+    let (mut chat, _sender, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
+    chat.local_settings.tui.status_line = Some(vec!["yolo-mode".to_string()]);
+    chat.set_yolo_status(Some("Full Access".to_string()));
+
+    insta::assert_snapshot!(chat.status_line_text().unwrap_or_default(), @"Full Access");
+}
+
+#[tokio::test]
 async fn temporary_thread_usage_failures_have_bounded_retries() {
     let (mut chat, _sender, mut rx, _op_rx) = make_chatwidget_manual_with_sender().await;
     let thread_id = ThreadId::new();

@@ -6,6 +6,7 @@ use crate::config::TokenBudgetConfig;
 use crate::environment_selection::EnvironmentConfigOrigin;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::exec_policy::AllowPrefixRules;
+use crate::runtime_permissions::RuntimeFullAccessState;
 use crate::shell_snapshot::ShellSnapshotFile;
 use crate::tools::sandboxing::executor_windows_sandbox_level;
 use arc_swap::ArcSwap;
@@ -203,6 +204,8 @@ pub struct TurnContext {
     pub(crate) configured_token_budget: Option<TokenBudgetConfig>,
     /// Captured once so later steps do not re-read config layers to detect user preferences.
     pub(crate) use_model_token_budget_defaults: bool,
+    /// Runtime Full Access state shared by the root thread and all of its agents.
+    pub(crate) runtime_full_access: Arc<RuntimeFullAccessState>,
     pub(crate) auth_manager: Option<Arc<AuthManager>>,
     /// Frozen settings used to construct this context. Legacy turn consumers
     /// keep this view even when later steps use different settings.
@@ -336,7 +339,11 @@ impl TurnContext {
     /// Legacy: returns the frozen initial-turn approval policy.
     /// Step-scoped consumers should use their captured `StepContext::settings`.
     pub(crate) fn approval_policy(&self) -> AskForApproval {
-        self.config.permissions.approval_policy.value()
+        if self.runtime_full_access.is_enabled() {
+            AskForApproval::Never
+        } else {
+            self.config.permissions.approval_policy.value()
+        }
     }
 
     /// Legacy: returns the frozen initial-turn prefix-rule policy.
@@ -381,8 +388,27 @@ impl TurnContext {
 
     /// Returns the selected environment's permissions, or the thread's permissions when none is ready.
     pub(crate) fn permission_profile(&self) -> PermissionProfile {
-        self.environments
-            .permission_profile_or_else(|| self.config.permissions.effective_permission_profile())
+        let configured = self
+            .environments
+            .permission_profile_or_else(|| self.config.permissions.effective_permission_profile());
+        if self.environments.primary_config_origin() == Some(EnvironmentConfigOrigin::Owner) {
+            configured
+        } else if self.runtime_full_access.is_enabled() {
+            PermissionProfile::Disabled
+        } else {
+            configured
+        }
+    }
+
+    pub(crate) fn effective_mcp_permission_profile(
+        &self,
+        configured: &PermissionProfile,
+    ) -> PermissionProfile {
+        if self.runtime_full_access.is_enabled() {
+            self.permission_profile()
+        } else {
+            configured.clone()
+        }
     }
 
     pub(crate) fn file_system_sandbox_policy(&self) -> FileSystemSandboxPolicy {
@@ -516,6 +542,7 @@ impl TurnContext {
             config: Arc::new(config),
             configured_token_budget: self.configured_token_budget.clone(),
             use_model_token_budget_defaults: self.use_model_token_budget_defaults,
+            runtime_full_access: Arc::clone(&self.runtime_full_access),
             auth_manager: self.auth_manager.clone(),
             initial_settings: Arc::clone(&step_settings),
             current_settings: ArcSwap::from(step_settings),
@@ -720,6 +747,7 @@ impl Session {
         main_execve_wrapper_exe: Option<&PathBuf>,
         per_turn_config: Config,
         step_settings: Arc<ResolvedStepSettings>,
+        runtime_full_access: Arc<RuntimeFullAccessState>,
         models_manager: &SharedModelsManager,
         network: Option<NetworkProxy>,
         environments: TurnEnvironmentSnapshot,
@@ -752,11 +780,24 @@ impl Session {
             super::time_reminder::apply_persistent_defaults(&mut per_turn_config);
         }
         per_turn_config.service_tier = step_settings.service_tier.clone();
-        let permission_profile = environments.permission_profile_or_else(|| {
+        let runtime_full_access_enabled = runtime_full_access.is_enabled();
+        let configured_permission_profile = environments.permission_profile_or_else(|| {
             per_turn_config.permissions.effective_permission_profile()
         });
+        let permission_profile =
+            if environments.primary_config_origin() == Some(EnvironmentConfigOrigin::Owner) {
+                configured_permission_profile
+            } else if runtime_full_access_enabled {
+                PermissionProfile::Disabled
+            } else {
+                configured_permission_profile
+            };
         let auto_review_enabled = crate::guardian::routes_approval_policy_to_guardian(
-            per_turn_config.permissions.approval_policy.value(),
+            if runtime_full_access_enabled {
+                AskForApproval::Never
+            } else {
+                per_turn_config.permissions.approval_policy.value()
+            },
             per_turn_config.approvals_reviewer,
         );
         let per_turn_config = Arc::new(per_turn_config);
@@ -788,6 +829,7 @@ impl Session {
             config: per_turn_config,
             configured_token_budget,
             use_model_token_budget_defaults,
+            runtime_full_access,
             auth_manager,
             initial_settings: Arc::clone(&step_settings),
             current_settings: ArcSwap::from(step_settings),
@@ -928,10 +970,20 @@ impl Session {
             .and_then(|turn_environment| turn_environment.cwd().to_abs_path().ok())
             .unwrap_or_else(|| session_configuration.cwd().clone());
         let per_turn_config = self.build_per_turn_config(&session_configuration, cwd.clone());
-        let network_permission_profile = primary_turn_environment
+        let configured_network_permission_profile = primary_turn_environment
             .map(TurnEnvironment::permission_profile)
             .cloned()
             .unwrap_or_else(|| session_configuration.permission_profile());
+        let runtime_full_access = self.services.agent_control.runtime_full_access();
+        let runtime_full_access_enabled = runtime_full_access.is_enabled();
+        let network_permission_profile =
+            if turn_environments.primary_config_origin() == Some(EnvironmentConfigOrigin::Owner) {
+                configured_network_permission_profile
+            } else if runtime_full_access_enabled {
+                PermissionProfile::Disabled
+            } else {
+                configured_network_permission_profile
+            };
         let model_info = session_configuration
             .step_settings
             .resolve_model_info(
@@ -1015,6 +1067,7 @@ impl Session {
             self.services.main_execve_wrapper_exe.as_ref(),
             per_turn_config,
             step_settings,
+            runtime_full_access,
             &self.services.models_manager,
             self.services
                 .network_proxy

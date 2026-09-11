@@ -2780,7 +2780,7 @@ impl Session {
         cancellation_token: CancellationToken,
     ) -> Option<RequestPermissionsResponse> {
         let turn_context = &step_context.turn;
-        let approval_policy = step_context.settings.approval_policy();
+        let approval_policy = step_context.approval_policy();
         let Some(environment) = step_context
             .environments
             .turn_environments()

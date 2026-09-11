@@ -301,6 +301,13 @@
       "description": "Determines the conditions under which the user is consulted to approve running the command proposed by Codex.",
       "oneOf": [
         {
+          "description": "Require approval unless an explicit exec policy rule allows the command.",
+          "enum": [
+            "untrusted"
+          ],
+          "type": "string"
+        },
+        {
           "description": "The model decides when to ask the user for approval.",
           "enum": [
             "on-request"
@@ -3935,7 +3942,8 @@
               "toggle_raw_output": null,
               "toggle_shortcuts": null,
               "toggle_side_conversation": null,
-              "toggle_vim_mode": null
+              "toggle_vim_mode": null,
+              "toggle_yolo_mode": null
             },
             "list": {
               "accept": null,
@@ -4664,6 +4672,14 @@
             }
           ],
           "description": "Toggle Vim mode for the composer input."
+        },
+        "toggle_yolo_mode": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Toggle Full Access (shown as YOLO) for the current thread and its agents."
         }
       },
       "type": "object"
@@ -4780,7 +4796,8 @@
             "toggle_raw_output": null,
             "toggle_shortcuts": null,
             "toggle_side_conversation": null,
-            "toggle_vim_mode": null
+            "toggle_vim_mode": null,
+            "toggle_yolo_mode": null
           }
         },
         "list": {

@@ -57,6 +57,8 @@ mod thread_usage;
 mod transcript_composer;
 #[path = "tests/turn_submission.rs"]
 mod turn_submission;
+#[path = "tests/yolo_mode_tests.rs"]
+mod yolo_mode_tests;
 
 use super::*;
 use crate::app_backtrack::BacktrackSelection;
@@ -5852,6 +5854,7 @@ async fn make_test_app() -> App {
         primary_session_configured: None,
         pending_primary_events: VecDeque::new(),
         pending_app_server_requests: PendingAppServerRequests::default(),
+        yolo_mode: YoloMode::default(),
         dynamic_tool_status_updates: tokio::sync::broadcast::channel(/*capacity*/ 64).0,
         dynamic_tool_tasks: HashMap::new(),
         pending_startup_thread_start: false,
@@ -5946,6 +5949,7 @@ pub(super) async fn make_test_app_with_channels() -> (
             primary_session_configured: None,
             pending_primary_events: VecDeque::new(),
             pending_app_server_requests: PendingAppServerRequests::default(),
+            yolo_mode: YoloMode::default(),
             dynamic_tool_status_updates: tokio::sync::broadcast::channel(/*capacity*/ 64).0,
             dynamic_tool_tasks: HashMap::new(),
             pending_startup_thread_start: false,

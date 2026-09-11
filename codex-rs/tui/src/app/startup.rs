@@ -158,8 +158,12 @@ impl App {
             app_server: AppServerSession,
             error: impl Into<color_eyre::eyre::Report>,
         ) -> Result<AppExitInfo> {
-            if let Err(shutdown_error) = app_server.shutdown().await {
-                tracing::warn!("app-server shutdown failed: {shutdown_error}");
+            match tokio::time::timeout(TUI_EXIT_SHUTDOWN_TIMEOUT, app_server.shutdown()).await {
+                Ok(Ok(())) => {}
+                Ok(Err(shutdown_error)) => {
+                    tracing::warn!("app-server shutdown failed: {shutdown_error}");
+                }
+                Err(_) => tracing::warn!("timed out waiting for app-server shutdown"),
             }
             Err(error.into())
         }
@@ -659,6 +663,8 @@ See the Codex keymap documentation for supported actions and examples."
         #[cfg(not(debug_assertions))]
         let upgrade_version = crate::updates::get_upgrade_version(&config);
 
+        let yolo_mode = YoloMode::default();
+
         let mut app = Self {
             feature_write_lock: Arc::default(),
             model_catalog,
@@ -721,6 +727,7 @@ See the Codex keymap documentation for supported actions and examples."
             primary_session_configured: None,
             pending_primary_events: VecDeque::new(),
             pending_app_server_requests: PendingAppServerRequests::default(),
+            yolo_mode,
             dynamic_tool_status_updates,
             dynamic_tool_tasks: HashMap::new(),
             pending_startup_thread_start,
@@ -742,6 +749,7 @@ See the Codex keymap documentation for supported actions and examples."
         if !tui.is_terminal_focused() {
             app.recap.note_focus_lost(Instant::now());
         }
+        app.refresh_yolo_status();
         if start_in_agents_overview {
             app.open_agents_overview(&app_server);
         } else if !matches!(app.app_server_target, AppServerTarget::Embedded) {
@@ -1169,8 +1177,12 @@ See the Codex keymap documentation for supported actions and examples."
                 }
             }
         };
-        if let Err(err) = app_server.shutdown().await {
-            tracing::warn!(error = %err, "failed to shut down embedded app server");
+        match tokio::time::timeout(TUI_EXIT_SHUTDOWN_TIMEOUT, app_server.shutdown()).await {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                tracing::warn!(error = %err, "failed to shut down embedded app server");
+            }
+            Err(_) => tracing::warn!("timed out waiting for embedded app-server shutdown"),
         }
         let clear_pet_result = tui.clear_ambient_pet_image();
         let clear_result = tui.terminal.clear();

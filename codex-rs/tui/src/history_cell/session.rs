@@ -383,7 +383,7 @@ impl HistoryCell for SessionHeaderHistoryCell {
             let permissions_label = format!("{PERMISSIONS_LABEL:<label_width$}");
             lines.push(make_row(vec![
                 Span::from(format!("{permissions_label} ")).dim(),
-                "YOLO mode".magenta().bold(),
+                "Full Access".magenta().bold(),
             ]));
         }
 
@@ -410,7 +410,7 @@ impl HistoryCell for SessionHeaderHistoryCell {
             )),
         ];
         if self.yolo_mode {
-            lines.push(Line::from("permissions: YOLO mode"));
+            lines.push(Line::from("permissions: Full Access"));
         }
         lines
     }

@@ -64,6 +64,143 @@ fn thread_id_generator_defaults_to_standard_ids() {
 }
 
 #[tokio::test]
+async fn full_access_override_is_shared_with_existing_and_future_subagents() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    let configured_approval = config.permissions.approval_policy.value();
+    let configured_profile = config.permissions.effective_permission_profile();
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let root = manager
+        .start_thread(StartThreadOptions::new(config.clone()))
+        .await
+        .expect("start root thread");
+    let root_existing_turn = root.thread.session.new_default_turn().await;
+
+    manager
+        .set_agent_tree_full_access(root.thread_id, true)
+        .await
+        .expect("enable Full Access");
+    let child = root
+        .thread
+        .session
+        .services
+        .agent_control
+        .spawn_agent_with_metadata(
+            config,
+            vec![UserInput::Text {
+                text: "child task".to_string(),
+                text_elements: Vec::new(),
+            }],
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id: root.thread_id,
+                depth: 1,
+                agent_path: None,
+                agent_nickname: None,
+                agent_role: None,
+            })),
+            SpawnAgentOptions {
+                parent_thread_id: Some(root.thread_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("spawn child agent");
+    let root_yolo_turn = root.thread.session.new_default_turn().await;
+    let child_thread = manager
+        .get_thread(child.thread_id)
+        .await
+        .expect("load child thread");
+    let child_yolo_turn = child_thread.session.new_default_turn().await;
+
+    assert_eq!(
+        (
+            root_existing_turn.approval_policy(),
+            root_existing_turn.permission_profile(),
+            root_yolo_turn.approval_policy(),
+            root_yolo_turn.permission_profile(),
+            child_yolo_turn.approval_policy(),
+            child_yolo_turn.permission_profile(),
+        ),
+        (
+            AskForApproval::Never,
+            PermissionProfile::Disabled,
+            AskForApproval::Never,
+            PermissionProfile::Disabled,
+            AskForApproval::Never,
+            PermissionProfile::Disabled,
+        )
+    );
+
+    assert_eq!(
+        (
+            manager
+                .agent_tree_full_access(root.thread_id)
+                .await
+                .expect("read root Full Access"),
+            manager
+                .agent_tree_full_access(child.thread_id)
+                .await
+                .expect("read child Full Access"),
+        ),
+        (true, true)
+    );
+
+    manager
+        .set_agent_tree_full_access(child.thread_id, false)
+        .await
+        .expect("disable Full Access through child");
+    let root_restored_turn = root.thread.session.new_default_turn().await;
+    let child_restored_turn = child_thread.session.new_default_turn().await;
+    assert_eq!(
+        (
+            manager
+                .agent_tree_full_access(root.thread_id)
+                .await
+                .expect("read root Full Access"),
+            manager
+                .agent_tree_full_access(child.thread_id)
+                .await
+                .expect("read child Full Access"),
+        ),
+        (false, false)
+    );
+    assert_eq!(
+        (
+            root_existing_turn.approval_policy(),
+            root_existing_turn.permission_profile(),
+            root_yolo_turn.approval_policy(),
+            root_yolo_turn.permission_profile(),
+            root_restored_turn.approval_policy(),
+            root_restored_turn.permission_profile(),
+            child_restored_turn.approval_policy(),
+            child_restored_turn.permission_profile(),
+        ),
+        (
+            configured_approval,
+            configured_profile.clone(),
+            configured_approval,
+            configured_profile.clone(),
+            configured_approval,
+            configured_profile.clone(),
+            configured_approval,
+            configured_profile,
+        )
+    );
+
+    manager
+        .shutdown_all_threads_bounded(Duration::from_secs(10))
+        .await;
+}
+
+#[tokio::test]
 async fn reserved_thread_id_is_used_without_changing_normal_id_generation() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;

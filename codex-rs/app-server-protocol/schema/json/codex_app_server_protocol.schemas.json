@@ -4842,6 +4842,26 @@
           "properties": {
             "method": {
               "enum": [
+                "thread/fullAccess/updated"
+              ],
+              "title": "Thread/fullAccess/updatedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/ThreadFullAccessUpdatedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Thread/fullAccess/updatedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
                 "thread/tokenUsage/updated"
               ],
               "title": "Thread/tokenUsage/updatedNotificationMethod",
@@ -20817,6 +20837,23 @@
           "thread"
         ],
         "title": "ThreadForkResponse",
+        "type": "object"
+      },
+      "ThreadFullAccessUpdatedNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "threadId"
+        ],
+        "title": "ThreadFullAccessUpdatedNotification",
         "type": "object"
       },
       "ThreadGoal": {

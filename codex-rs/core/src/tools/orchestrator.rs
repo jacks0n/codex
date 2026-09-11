@@ -128,7 +128,7 @@ impl ToolOrchestrator {
         T: ToolRuntime<Rq, Out>,
     {
         let turn_ctx = tool_ctx.step_context.turn.as_ref();
-        let approval_policy = tool_ctx.step_context.settings.approval_policy();
+        let approval_policy = tool_ctx.step_context.approval_policy();
         let otel = turn_ctx.session_telemetry.clone();
         let otel_tn = flat_tool_name(&tool_ctx.tool_name).into_owned();
         let otel_ci = &tool_ctx.call_id;

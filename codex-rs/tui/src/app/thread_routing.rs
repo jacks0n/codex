@@ -1064,6 +1064,7 @@ impl App {
         if let ServerNotification::ThreadSettingsUpdated(notification) = &notification {
             self.apply_thread_settings_to_cached_session(thread_id, &notification.thread_settings)
                 .await;
+            self.refresh_yolo_status();
             if self
                 .pending_server_profiles
                 .get(&thread_id)
@@ -1084,6 +1085,9 @@ impl App {
                 self.pending_server_profiles.remove(&thread_id);
                 permission_change_confirmed = true;
             }
+        }
+        if let ServerNotification::ThreadFullAccessUpdated(notification) = &notification {
+            self.observe_full_access(thread_id, notification.enabled);
         }
         let inferred_session = if let ServerNotification::ThreadStarted(started) = &notification
             && self.primary_session_configured.is_some()
@@ -1422,6 +1426,7 @@ impl App {
                 self.chat_widget.handle_prompt_edit_thread_session(session);
             }
         }
+        self.refresh_yolo_status();
         let should_buffer_initial_replay = !turns.is_empty();
         if should_buffer_initial_replay {
             self.app_event_tx

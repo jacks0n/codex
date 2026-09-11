@@ -866,6 +866,16 @@ impl TurnEnvironmentSnapshot {
         self.turn_environments().next()
     }
 
+    pub(crate) fn primary_config_origin(&self) -> Option<EnvironmentConfigOrigin> {
+        self.environments
+            .first()
+            .and_then(|environment| match environment {
+                TurnEnvironmentState::Ready(environment) => Some(environment.config_origin),
+                TurnEnvironmentState::Starting(environment) => Some(environment.config_origin),
+                TurnEnvironmentState::Failed => None,
+            })
+    }
+
     /// Returns the primary environment's resolved permissions, or the provided fallback.
     pub(crate) fn permission_profile_or_else(
         &self,
