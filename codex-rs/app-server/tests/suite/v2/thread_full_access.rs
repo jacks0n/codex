@@ -73,12 +73,17 @@ async fn thread_full_access_update_applies_to_an_active_turn() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     const CALL_ID: &str = "active-turn-command";
+    let workspace = TempDir::new()?;
+    let output_path = workspace.path().join("full-access.txt");
     let server = responses::start_mock_server().await;
     let command_response = create_command_execution_sse_response(
         vec![
             "python3".to_string(),
             "-c".to_string(),
-            "print(42)".to_string(),
+            format!(
+                "from pathlib import Path; Path({:?}).write_text('full access')",
+                output_path
+            ),
         ],
         /*workdir*/ None,
         Some(5_000),
@@ -97,7 +102,7 @@ async fn thread_full_access_update_applies_to_an_active_turn() -> Result<()> {
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
         .with_approval_policy("untrusted")
-        .with_sandbox_mode("danger-full-access")
+        .with_sandbox_mode("read-only")
         .write(codex_home.path())?;
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -107,6 +112,7 @@ async fn thread_full_access_update_applies_to_an_active_turn() -> Result<()> {
     let ThreadStartResponse { thread, .. } = mcp
         .start_thread(ThreadStartParams {
             model: Some("mock-model".to_string()),
+            cwd: Some(workspace.path().to_string_lossy().into_owned()),
             ..Default::default()
         })
         .await?;
@@ -138,12 +144,8 @@ async fn thread_full_access_update_applies_to_an_active_turn() -> Result<()> {
     let completed: TurnCompletedNotification =
         timeout(DEFAULT_TIMEOUT, mcp.read_notification("turn/completed")).await??;
     assert_eq!(completed.thread_id, thread.id);
-    assert!(
-        response_mock
-            .function_call_output_text(CALL_ID)
-            .is_some_and(|output| output.contains("42")),
-        "active turn should execute without requesting approval after Full Access is enabled"
-    );
+    assert_eq!(std::fs::read_to_string(output_path)?, "full access");
+    assert!(response_mock.function_call_output_text(CALL_ID).is_some());
 
     Ok(())
 }

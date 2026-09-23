@@ -3,7 +3,6 @@ use super::*;
 use codex_agent_extension::AgentInvocation;
 use codex_agent_extension::AgentRun;
 use codex_agent_extension::AgentRunner;
-use codex_app_server_protocol::ImageReference as V2ImageReference;
 use codex_app_server_protocol::ThreadFullAccessUpdateParams;
 use codex_app_server_protocol::ThreadFullAccessUpdateResponse;
 use codex_app_server_protocol::ThreadFullAccessUpdatedNotification;
