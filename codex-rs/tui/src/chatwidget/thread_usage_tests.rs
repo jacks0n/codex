@@ -70,7 +70,7 @@ fn estimated_cost_formats_dollars_and_sub_cent_values() {
 #[tokio::test]
 async fn yolo_status_line_item_displays_full_access_state() {
     let (mut chat, _sender, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
-    chat.config.tui_status_line = Some(vec!["yolo-mode".to_string()]);
+    chat.local_settings.tui.status_line = Some(vec!["yolo-mode".to_string()]);
     chat.set_yolo_status(Some("YOLO".to_string()));
 
     insta::assert_snapshot!(chat.status_line_text().unwrap_or_default(), @"YOLO");
