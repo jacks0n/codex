@@ -555,8 +555,7 @@ impl TurnContext {
         let configured = self
             .initial_environments
             .permission_profile_or_else(|| self.config.permissions.effective_permission_profile());
-        if self.initial_environments.primary_config_origin()
-            == Some(EnvironmentConfigOrigin::Owner)
+        if self.initial_environments.primary_config_origin() == Some(EnvironmentConfigOrigin::Owner)
         {
             configured
         } else if self.runtime_full_access.is_enabled() {
@@ -582,7 +581,7 @@ impl TurnContext {
         &self,
         environments: &TurnEnvironmentSnapshot,
     ) -> PermissionProfile {
-        environments.permission_profile_or_else(|| {
+        let configured = environments.permission_profile_or_else(|| {
             self.config
                 .permissions
                 .permission_profile()
@@ -590,7 +589,14 @@ impl TurnContext {
                 .materialize_project_roots_with_path_uris(
                     environments.primary_workspace_root_uris(),
                 )
-        })
+        });
+        if environments.primary_config_origin() == Some(EnvironmentConfigOrigin::Owner) {
+            configured
+        } else if self.runtime_full_access.is_enabled() {
+            PermissionProfile::Disabled
+        } else {
+            configured
+        }
     }
 
     pub(crate) fn file_system_sandbox_policy(&self) -> FileSystemSandboxPolicy {

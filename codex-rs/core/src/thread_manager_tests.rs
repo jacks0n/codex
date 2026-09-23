@@ -311,6 +311,7 @@ async fn full_access_override_is_shared_with_existing_and_future_subagents() {
         .await
         .expect("start root thread");
     let root_existing_turn = root.thread.session.new_default_turn().await;
+    let root_existing_step = StepContext::for_test(Arc::clone(&root_existing_turn));
 
     manager
         .set_agent_tree_full_access(root.thread_id, true)
@@ -366,6 +367,15 @@ async fn full_access_override_is_shared_with_existing_and_future_subagents() {
             PermissionProfile::Disabled,
         )
     );
+    assert_eq!(
+        root_existing_step
+            .with_runtime_permissions()
+            .environments
+            .primary()
+            .expect("root environment")
+            .permission_profile(),
+        &PermissionProfile::Disabled,
+    );
 
     assert_eq!(
         (
@@ -419,8 +429,17 @@ async fn full_access_override_is_shared_with_existing_and_future_subagents() {
             configured_approval,
             configured_profile.clone(),
             configured_approval,
-            configured_profile,
+            configured_profile.clone(),
         )
+    );
+    assert_eq!(
+        root_existing_step
+            .with_runtime_permissions()
+            .environments
+            .primary()
+            .expect("root environment")
+            .permission_profile(),
+        &configured_profile,
     );
 
     manager

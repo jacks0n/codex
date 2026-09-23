@@ -3751,11 +3751,6 @@ impl Session {
         let session_telemetry = settings.telemetry(&turn_context.session_telemetry);
         // Refresh only the captured step selection, without adopting newer inputs.
         let environments = inputs.environments.refresh_readiness();
-        let environments = if turn_context.runtime_full_access.is_enabled() {
-            environments.with_full_access()
-        } else {
-            environments
-        };
         let (loaded_agents_md, warnings) = self
             .services
             .agents_md_manager

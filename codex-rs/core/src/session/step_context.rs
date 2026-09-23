@@ -25,6 +25,7 @@ pub(crate) struct StepInputs {
 }
 
 /// Request-scoped state that may change between model sampling requests.
+#[derive(Clone)]
 pub(crate) struct StepContext {
     pub(crate) turn: Arc<TurnContext>,
     /// One immutable settings version captured before request preparation.
@@ -70,5 +71,13 @@ impl StepContext {
         } else {
             self.settings.approval_policy()
         }
+    }
+
+    pub(crate) fn with_runtime_permissions(&self) -> Self {
+        let mut context = self.clone();
+        if self.turn.runtime_full_access.is_enabled() {
+            context.environments = context.environments.with_full_access();
+        }
+        context
     }
 }

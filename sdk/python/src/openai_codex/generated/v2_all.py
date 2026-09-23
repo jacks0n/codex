@@ -5205,6 +5205,14 @@ class ThreadExtra(BaseModel):
     )
 
 
+class ThreadFullAccessUpdatedNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    enabled: bool
+    thread_id: Annotated[str, Field(alias="threadId")]
+
+
 class ThreadGoalClearParams(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -9065,6 +9073,24 @@ class ThreadProjectUpdatedServerNotification(BaseModel):
     params: ThreadProjectUpdatedNotification
 
 
+class ThreadFullAccessUpdatedServerNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    emitted_at_ms: Annotated[
+        int | None,
+        Field(
+            alias="emittedAtMs",
+            description="Unix timestamp (in milliseconds) when app-server emitted this notification.",
+        ),
+    ] = None
+    method: Annotated[
+        Literal["thread/fullAccess/updated"],
+        Field(title="Thread/fullAccess/updatedNotificationMethod"),
+    ]
+    params: ThreadFullAccessUpdatedNotification
+
+
 class HookStartedServerNotification(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -12653,6 +12679,7 @@ class ServerNotification(
         | ThreadEnvironmentConnectedServerNotification
         | ThreadEnvironmentDisconnectedServerNotification
         | ThreadSettingsUpdatedServerNotification
+        | ThreadFullAccessUpdatedServerNotification
         | ThreadTokenUsageUpdatedServerNotification
         | TurnStartedServerNotification
         | HookStartedServerNotification
@@ -12741,6 +12768,7 @@ class ServerNotification(
         | ThreadEnvironmentConnectedServerNotification
         | ThreadEnvironmentDisconnectedServerNotification
         | ThreadSettingsUpdatedServerNotification
+        | ThreadFullAccessUpdatedServerNotification
         | ThreadTokenUsageUpdatedServerNotification
         | TurnStartedServerNotification
         | HookStartedServerNotification

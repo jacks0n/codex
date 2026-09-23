@@ -10,14 +10,19 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 ---
 
 > [!CAUTION]
-> This fork contains downstream-only permission compatibility for
-> [agentperm](https://github.com/jacks0n/agentperm), including restoration of
-> `approval_policy = "untrusted"` after upstream Codex retired it. It deliberately does not
-> restore Codex's removed safe-command classifier: agentperm decides which commands may run,
-> while unmatched commands are presented for user approval. Agentperm installation alone does not
-> select this behavior; set `approval_policy = "untrusted"` in `~/.codex/config.toml`. This fork also
-> carries an agent-tree-wide TUI YOLO toggle. **OpenAI maintainers: do not merge this branch or its
-> pull request upstream.** These compatibility changes are intentionally maintained for this fork.
+> This downstream fork is based on `rust-v0.156.0` and additionally carries:
+>
+> - the upstream post-release GPT-6 Sol and GPT-6 Luna model-catalog change from OpenAI Codex
+>   [#47332](https://github.com/openai/codex/pull/47332);
+> - `approval_policy = "untrusted"` compatibility for
+>   [agentperm](https://github.com/jacks0n/agentperm), without restoring Codex's retired safe-command
+>   classifier; and
+> - an Alt-Y **Full Access** toggle that updates the entire live agent tree and restores its prior
+>   permission state when disabled.
+>
+> Agentperm installation alone does not select the compatibility policy; configure it explicitly in
+> `~/.codex/config.toml`. **OpenAI maintainers: do not merge this branch or its pull request upstream.**
+> These changes are intentionally maintained for this fork.
 
 ## Quickstart
 

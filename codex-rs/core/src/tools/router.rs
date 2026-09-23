@@ -360,6 +360,9 @@ impl ToolRouter {
             ..
         } = call;
 
+        // Resolve runtime permissions at dispatch so a live Full Access toggle also affects tool
+        // calls sampled before the toggle changed.
+        let step_context = Arc::new(step_context.with_runtime_permissions());
         // Keep the legacy ToolInvocation.turn field tied to the same request state until handlers migrate.
         let turn = Arc::clone(&step_context.turn);
         let invocation = ToolInvocation {
