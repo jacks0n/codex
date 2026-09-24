@@ -734,7 +734,11 @@ impl ChatWidget {
                     }
                 }),
             StatusLineItem::Status => Some(self.run_state_status_text()),
-            StatusLineItem::Permissions => Some(permissions_display(&self.config)),
+            StatusLineItem::Permissions => Some(if self.yolo_status.is_some() {
+                "Full Access".to_string()
+            } else {
+                permissions_display(&self.config)
+            }),
             StatusLineItem::ApprovalMode => Some(approval_mode_display(&self.config)),
             StatusLineItem::YoloMode => self.yolo_status.clone(),
             StatusLineItem::UsedTokens => {
