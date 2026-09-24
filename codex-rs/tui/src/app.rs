@@ -263,6 +263,7 @@ mod user_verification;
 mod user_verification_errors;
 mod user_verification_requests;
 mod working_directory;
+mod yolo_mode;
 
 use self::agent_navigation::AgentNavigationDirection;
 use self::agent_navigation::AgentNavigationState;
@@ -275,6 +276,7 @@ use self::side::SideParentStatusChange;
 use self::side::SideThreadState;
 use self::startup_prompts::*;
 use self::thread_events::*;
+use self::yolo_mode::YoloMode;
 
 const EXTERNAL_EDITOR_HINT: &str = "Save and close external editor to continue.";
 const THREAD_EVENT_CHANNEL_CAPACITY: usize = 32768;
@@ -648,6 +650,7 @@ pub(crate) struct App {
     primary_session_configured: Option<ThreadSessionState>,
     pending_primary_events: VecDeque<ThreadBufferedEvent>,
     pending_app_server_requests: PendingAppServerRequests,
+    yolo_mode: YoloMode,
     dynamic_tool_status_updates:
         tokio::sync::broadcast::Sender<codex_app_server_protocol::ThreadStatusChangedNotification>,
     dynamic_tool_tasks: HashMap<codex_app_server_protocol::RequestId, (String, JoinHandle<()>)>,

@@ -1632,6 +1632,37 @@ mod tests {
     }
 
     #[test]
+    fn exec_prompt_renders_the_complete_wrapped_shell_command() {
+        let (tx, _rx) = unbounded_channel::<AppEvent>();
+        let view = make_overlay(
+            ApprovalRequest::Exec(ExecApprovalRequest {
+                kind: Default::default(),
+                thread_id: ThreadId::new(),
+                thread_label: Some("Agent".to_string()),
+                id: "test".to_string(),
+                environment_id: Some("local".to_string()),
+                command: vec![
+                    "/bin/zsh".to_string(),
+                    "-lc".to_string(),
+                    "printf agentperm-ask".to_string(),
+                ],
+                reason: None,
+                available_decisions: vec![
+                    CommandExecutionApprovalDecision::Accept,
+                    CommandExecutionApprovalDecision::Cancel,
+                ],
+                network_approval_context: None,
+                additional_permissions: None,
+            }),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        let rendered = render_overlay_lines(&view, /*width*/ 80);
+        assert!(rendered.contains("$ printf agentperm-ask"), "{rendered}");
+    }
+
+    #[test]
     fn exec_prefix_option_emits_execpolicy_amendment() {
         let (tx, mut rx) = unbounded_channel::<AppEvent>();
         let tx = AppEventSender::new(tx);

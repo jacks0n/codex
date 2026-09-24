@@ -734,8 +734,13 @@ impl ChatWidget {
                     }
                 }),
             StatusLineItem::Status => Some(self.run_state_status_text()),
-            StatusLineItem::Permissions => Some(permissions_display(&self.config)),
+            StatusLineItem::Permissions => Some(if self.yolo_status.is_some() {
+                "Full Access".to_string()
+            } else {
+                permissions_display(&self.config)
+            }),
             StatusLineItem::ApprovalMode => Some(approval_mode_display(&self.config)),
+            StatusLineItem::YoloMode => self.yolo_status.clone(),
             StatusLineItem::UsedTokens => {
                 let usage = self.status_line_total_usage();
                 let total = usage.blended_total();
@@ -849,6 +854,7 @@ impl ChatWidget {
             StatusSurfacePreviewItem::BranchChanges => StatusLineItem::BranchChanges,
             StatusSurfacePreviewItem::Permissions => StatusLineItem::Permissions,
             StatusSurfacePreviewItem::ApprovalMode => StatusLineItem::ApprovalMode,
+            StatusSurfacePreviewItem::YoloMode => StatusLineItem::YoloMode,
             StatusSurfacePreviewItem::ContextRemaining => StatusLineItem::ContextRemaining,
             StatusSurfacePreviewItem::ContextUsed => StatusLineItem::ContextUsed,
             StatusSurfacePreviewItem::FiveHourLimit => StatusLineItem::FiveHourLimit,
@@ -1212,7 +1218,9 @@ fn permissions_display(config: &Config) -> String {
     {
         return "Workspace".to_string();
     }
-    if permission_profile == PermissionProfile::Disabled {
+    if permission_profile == PermissionProfile::Disabled
+        && AskForApproval::from(config.permissions.approval_policy.value()) == AskForApproval::Never
+    {
         return "Full Access".to_string();
     }
 

@@ -9,6 +9,19 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 
 ---
 
+> [!CAUTION]
+> This downstream fork is based on `rust-v0.155.1` and additionally carries:
+>
+> - `approval_policy = "untrusted"` compatibility for
+>   [agentperm](https://github.com/jacks0n/agentperm), without restoring Codex's retired safe-command
+>   classifier; and
+> - an Alt-Y **Full Access** toggle that updates the entire live agent tree and restores its prior
+>   permission state when disabled.
+>
+> Agentperm installation alone does not select the compatibility policy; configure it explicitly in
+> `~/.codex/config.toml`. **OpenAI maintainers: do not merge this branch or its pull request upstream.**
+> These changes are intentionally maintained for this fork.
+
 ## Quickstart
 
 ### Installing and running Codex CLI
