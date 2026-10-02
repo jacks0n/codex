@@ -12203,6 +12203,13 @@ class ThreadResumeResponse(BaseModel):
             description="Saved list of disabled plugin IDs. Does not yet filter plugin capabilities.",
         ),
     ] = []
+    full_access: Annotated[
+        bool | None,
+        Field(
+            alias="fullAccess",
+            description="Whether the loaded thread's runtime Full Access override is enabled.",
+        ),
+    ] = False
     instruction_sources: Annotated[
         list[LegacyAppPathString] | None,
         Field(

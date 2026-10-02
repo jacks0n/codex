@@ -166,7 +166,8 @@ impl Session {
             .exec_policy
             .current_for_prefix_rules(turn_context.allow_prefix_rules());
         if turn_context.config.include_permissions_instructions {
-            let environment = step_context.environments.primary();
+            let runtime_step_context = step_context.with_runtime_permissions();
+            let environment = runtime_step_context.environments.primary();
             let sandbox = environment
                 .filter(|environment| environment.environment.is_remote())
                 .map(|environment| {
@@ -175,8 +176,8 @@ impl Session {
             let paths = sandbox
                 .as_ref()
                 .map(FileSystemSandboxContext::policy_context);
-            let permission_profile =
-                turn_context.permission_profile_for_environments(&step_context.environments);
+            let permission_profile = turn_context
+                .permission_profile_for_environments(&runtime_step_context.environments);
             #[allow(deprecated)]
             let cwd = environment
                 .and_then(|environment| environment.cwd().to_abs_path().ok())

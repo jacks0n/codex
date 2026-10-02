@@ -322,20 +322,21 @@ async fn full_access_override_is_shared_with_existing_and_future_subagents() {
         .thread
         .session
         .services
-        .agent_control
+        .local_agent_runtime
+        .control(root.thread.session.session_id())
         .spawn_agent_with_metadata(
             config,
             vec![UserInput::Text {
                 text: "child task".to_string(),
                 text_elements: Vec::new(),
             }],
-            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
                 parent_thread_id: root.thread_id,
                 depth: 1,
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
-            })),
+            }),
             SpawnAgentOptions {
                 parent_thread_id: Some(root.thread_id),
                 ..Default::default()

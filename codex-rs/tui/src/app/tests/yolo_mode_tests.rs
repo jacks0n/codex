@@ -72,3 +72,42 @@ async fn runtime_full_access_toggle_updates_permissions_status() -> Result<()> {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn runtime_full_access_status_tracks_the_primary_thread() -> Result<()> {
+    let mut app = make_test_app().await;
+    app.chat_widget.setup_status_line(
+        vec![crate::bottom_pane::StatusLineItem::Permissions],
+        /*use_theme_colors*/ true,
+    );
+    app.chat_widget
+        .set_approval_policy(AskForApproval::UnlessTrusted);
+    app.chat_widget
+        .set_permission_profile_from_session_snapshot(PermissionProfileSnapshot::legacy(
+            PermissionProfile::Disabled,
+        ))?;
+    let enabled_thread = ThreadId::new();
+    let other_thread = ThreadId::new();
+
+    app.primary_thread_id = Some(enabled_thread);
+    app.observe_full_access(enabled_thread, true);
+    let enabled_status = app.chat_widget.status_line_text().unwrap_or_default();
+
+    app.primary_thread_id = Some(other_thread);
+    app.refresh_yolo_status();
+    let other_status = app.chat_widget.status_line_text().unwrap_or_default();
+
+    app.primary_thread_id = Some(enabled_thread);
+    app.refresh_yolo_status();
+    let restored_status = app.chat_widget.status_line_text().unwrap_or_default();
+
+    pretty_assertions::assert_eq!(
+        (
+            enabled_status.as_str(),
+            other_status.as_str(),
+            restored_status.as_str()
+        ),
+        ("Full Access", "Custom permissions", "Full Access")
+    );
+    Ok(())
+}

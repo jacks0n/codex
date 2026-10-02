@@ -766,6 +766,19 @@ async fn review_guardian_mcp_elicitation(
         return Ok(None);
     };
     let step_settings = turn_context.next_step_settings.load_full();
+    let approval_policy =
+        turn_context.effective_approval_policy(mcp_config.approval_policy.value());
+    let permission_profile = turn_context.effective_mcp_permission_profile(
+        &turn_context
+            .config
+            .permissions
+            .effective_permission_profile(),
+    );
+    let environments = if turn_context.runtime_full_access.is_enabled() {
+        turn_context.initial_environments.clone().with_full_access()
+    } else {
+        turn_context.initial_environments.clone()
+    };
 
     // User approval skips ordinary CUA checks, not separate sensitive requests.
     let user_cua_execution = step_settings.approvals_reviewer() == ApprovalsReviewer::User
@@ -780,30 +793,27 @@ async fn review_guardian_mcp_elicitation(
         });
 
     // Full Access skips inference, not the active-turn and cancellation checks.
-    if (user_cua_execution
-        || turn_context.initial_environments.has_full_access(
-            turn_context.approval_policy(),
-            &turn_context
-                .config
-                .permissions
-                .effective_permission_profile(),
-        ))
-        && matches!(
+    let full_access = environments.has_full_access(approval_policy, &permission_profile);
+    if user_cua_execution || full_access {
+        if matches!(
             &request.elicitation,
             Elicitation::Mcp(rmcp::model::ElicitRequestParams::FormElicitationParams {
                 requested_schema, ..
             }) if requested_schema.properties.is_empty()
-        )
-    {
-        let decision = if cancellation_token.is_cancelled() {
-            ReviewDecision::Abort
-        } else {
-            ReviewDecision::Approved
-        };
-        return Ok(Some(mcp_elicitation_response_from_guardian_decision(
-            decision,
-            turn_context.model_info(),
-        )));
+        ) {
+            let decision = if cancellation_token.is_cancelled() {
+                ReviewDecision::Abort
+            } else {
+                ReviewDecision::Approved
+            };
+            return Ok(Some(mcp_elicitation_response_from_guardian_decision(
+                decision,
+                turn_context.model_info(),
+            )));
+        }
+        if full_access {
+            return Ok(None);
+        }
     }
 
     // The invocation identifies the tool event, but a nested elicitation can
@@ -918,7 +928,6 @@ async fn review_guardian_mcp_elicitation(
         };
         trusted_guardian_request.unwrap_or(*guardian_request).into()
     } else {
-        let approval_policy = turn_context.approval_policy();
         match approval_policy {
             AskForApproval::Never => {
                 let Some(permission_profile) =

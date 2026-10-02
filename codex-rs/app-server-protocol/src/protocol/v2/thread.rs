@@ -459,6 +459,9 @@ pub struct ThreadResumeParams {
 #[ts(export_to = "v2/")]
 pub struct ThreadResumeResponse {
     pub thread: Thread,
+    /// Whether the loaded thread's runtime Full Access override is enabled.
+    #[serde(default)]
+    pub full_access: bool,
     pub model: String,
     pub model_provider: String,
     pub service_tier: Option<String>,

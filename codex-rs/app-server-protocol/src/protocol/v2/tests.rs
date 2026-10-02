@@ -317,6 +317,7 @@ fn thread_resume_response_round_trips_initial_turns_page() {
             daybreak_enabled: None,
             turns: Vec::new(),
         },
+        full_access: false,
         model: "gpt-5".to_string(),
         model_provider: "openai".to_string(),
         service_tier: None,

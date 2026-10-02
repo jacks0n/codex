@@ -377,6 +377,7 @@ pub(crate) struct AppServerStartedThread {
     pub(crate) turns: Vec<Turn>,
     pub(crate) blocks_direct_input: bool,
     pub(crate) task_tools_available: bool,
+    pub(crate) runtime_full_access: bool,
 }
 
 pub(crate) fn is_active_writer_error(err: &color_eyre::eyre::Report) -> bool {
@@ -2270,6 +2271,7 @@ async fn started_thread_from_start_response(
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        runtime_full_access: false,
     })
 }
 
@@ -2293,6 +2295,7 @@ async fn started_thread_from_resume_response(
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        runtime_full_access: response.full_access,
     })
 }
 
@@ -2316,6 +2319,7 @@ async fn started_thread_from_fork_response(
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        runtime_full_access: false,
     })
 }
 
@@ -4124,6 +4128,7 @@ mod tests {
                     duration_ms: None,
                 }],
             },
+            full_access: true,
             model: "gpt-5.5".to_string(),
             model_provider: "openai".to_string(),
             service_tier: None,
@@ -4165,6 +4170,7 @@ mod tests {
         )
         .await
         .expect("resume response should map");
+        assert!(started.runtime_full_access);
         assert_eq!(started.session.forked_from_id, Some(forked_from_id));
         assert_eq!(
             started.session.runtime_workspace_roots,

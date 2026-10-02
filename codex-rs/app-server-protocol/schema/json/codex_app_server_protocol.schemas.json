@@ -23794,6 +23794,11 @@
             },
             "type": "array"
           },
+          "fullAccess": {
+            "default": false,
+            "description": "Whether the loaded thread's runtime Full Access override is enabled.",
+            "type": "boolean"
+          },
           "instructionSources": {
             "default": [],
             "description": "Environment-native paths to instruction source files currently loaded for this thread.",

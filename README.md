@@ -10,7 +10,7 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 ---
 
 > [!CAUTION]
-> This downstream fork is based on `rust-v0.155.1` and additionally carries:
+> This downstream fork is based on `rust-v0.160.0` and additionally carries:
 >
 > - `approval_policy = "untrusted"` compatibility for
 >   [agentperm](https://github.com/jacks0n/agentperm), without restoring Codex's retired safe-command

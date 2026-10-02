@@ -503,10 +503,14 @@ impl TurnContext {
     /// Legacy: returns the frozen initial-turn approval policy.
     /// Step-scoped consumers should use their captured `StepContext::settings`.
     pub(crate) fn approval_policy(&self) -> AskForApproval {
+        self.effective_approval_policy(self.config.permissions.approval_policy.value())
+    }
+
+    pub(crate) fn effective_approval_policy(&self, configured: AskForApproval) -> AskForApproval {
         if self.runtime_full_access.is_enabled() {
             AskForApproval::Never
         } else {
-            self.config.permissions.approval_policy.value()
+            configured
         }
     }
 
@@ -555,8 +559,7 @@ impl TurnContext {
         let configured = self
             .initial_environments
             .permission_profile_or_else(|| self.config.permissions.effective_permission_profile());
-        if self.initial_environments.primary_config_origin()
-            == Some(EnvironmentConfigOrigin::Owner)
+        if self.initial_environments.primary_config_origin() == Some(EnvironmentConfigOrigin::Owner)
         {
             configured
         } else if self.runtime_full_access.is_enabled() {

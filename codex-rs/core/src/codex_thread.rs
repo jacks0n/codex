@@ -881,6 +881,14 @@ impl CodexThread {
         self.session.thread_config_snapshot().await
     }
 
+    pub fn runtime_full_access(&self) -> bool {
+        self.session
+            .services
+            .local_agent_runtime
+            .runtime_full_access()
+            .is_enabled()
+    }
+
     /// Returns the active turn's reviewer, including live updates, or the thread default.
     pub async fn approvals_reviewer_for_turn(&self, turn_id: &str) -> ApprovalsReviewer {
         if let Some((turn, settings, _, _)) = self

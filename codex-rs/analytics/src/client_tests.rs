@@ -679,6 +679,7 @@ fn sample_thread_resume_response() -> ClientResponsePayload {
     ClientResponsePayload::ThreadResume(ThreadResumeResponse {
         disabled_plugin_ids: Vec::new(),
         thread: sample_thread("thread-2"),
+        full_access: false,
         model: "gpt-5".to_string(),
         model_provider: "openai".to_string(),
         service_tier: None,

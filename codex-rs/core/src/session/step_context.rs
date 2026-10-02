@@ -65,11 +65,8 @@ impl StepContext {
     }
 
     pub(crate) fn approval_policy(&self) -> AskForApproval {
-        if self.turn.runtime_full_access.is_enabled() {
-            AskForApproval::Never
-        } else {
-            self.settings.approval_policy()
-        }
+        self.turn
+            .effective_approval_policy(self.settings.approval_policy())
     }
 
     pub(crate) fn with_runtime_permissions(&self) -> Self {
