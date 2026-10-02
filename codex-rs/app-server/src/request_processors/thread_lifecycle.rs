@@ -759,6 +759,7 @@ pub(super) async fn handle_pending_thread_resume_request(
 
     let response = ThreadResumeResponse {
         thread,
+        full_access: conversation.runtime_full_access(),
         disabled_plugin_ids,
         model,
         model_provider: model_provider_id,

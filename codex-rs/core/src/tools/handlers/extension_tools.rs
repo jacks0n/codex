@@ -180,8 +180,8 @@ async fn to_extension_call(invocation: &ToolInvocation) -> ExtensionToolCall<'_>
     let codex_turn_metadata = invocation
         .turn
         .turn_metadata_state
-        .current_meta_value_for_mcp_request(ExecutionMetadata::from_settings(
-            &invocation.step_context.settings,
+        .current_meta_value_for_mcp_request(ExecutionMetadata::from_step_context(
+            &invocation.step_context,
         ))
         .and_then(|metadata| to_ascii_json_string(&metadata).ok());
     let mut environments = Vec::new();

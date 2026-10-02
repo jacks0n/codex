@@ -223,11 +223,6 @@ use windows_sandbox_config::resolve_windows_sandbox_type;
 const DEFAULT_IGNORE_LARGE_UNTRACKED_DIRS: i64 = 200;
 const DEFAULT_IGNORE_LARGE_UNTRACKED_FILES: i64 = 10 * 1024 * 1024;
 
-/// Signals that a public config selected the retired `untrusted` approval policy.
-#[derive(Debug, thiserror::Error)]
-#[error("approval_policy = \"untrusted\" is no longer supported; remove this setting")]
-pub struct UnsupportedUntrustedApprovalPolicyError;
-
 /// Compatibility-only config retained so legacy `ghost_snapshot` settings
 /// continue to load even though snapshots are no longer produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -3723,12 +3718,6 @@ impl Config {
             candidate_permission_profile: &permission_profile,
             credential_broker_base_url: cfg.openai_base_url.as_deref(),
         });
-        if cfg.approval_policy == Some(AskForApproval::UnlessTrusted) {
-            return Err(std::io::Error::new(
-                ErrorKind::InvalidData,
-                UnsupportedUntrustedApprovalPolicyError,
-            ));
-        }
         let approval_policy_was_explicit =
             approval_policy_override.is_some() || cfg.approval_policy.is_some();
         let mut approval_policy = approval_policy_override

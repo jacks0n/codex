@@ -4,6 +4,9 @@ use codex_agent_extension::AgentInvocation;
 use codex_agent_extension::AgentRun;
 use codex_agent_extension::AgentRunner;
 use codex_app_server_protocol::ImageReference as V2ImageReference;
+use codex_app_server_protocol::ThreadFullAccessUpdateParams;
+use codex_app_server_protocol::ThreadFullAccessUpdateResponse;
+use codex_app_server_protocol::ThreadFullAccessUpdatedNotification;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputBody;
@@ -207,6 +210,34 @@ impl TurnRequestProcessor {
         self.thread_settings_update_inner(request_id, params)
             .await
             .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn thread_full_access_update(
+        &self,
+        request_id: &ConnectionRequestId,
+        params: ThreadFullAccessUpdateParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (thread_id, thread) = self.load_thread(&params.thread_id).await?;
+        self.ensure_direct_input_allowed(request_id, thread.as_ref())
+            .await?;
+        self.thread_manager
+            .set_agent_tree_full_access(thread_id, params.enabled)
+            .await
+            .map_err(|err| invalid_request(err.to_string()))?;
+        self.outgoing
+            .send_server_notification(ServerNotification::ThreadFullAccessUpdated(
+                ThreadFullAccessUpdatedNotification {
+                    thread_id: thread_id.to_string(),
+                    enabled: params.enabled,
+                },
+            ))
+            .await;
+        Ok(Some(
+            ThreadFullAccessUpdateResponse {
+                enabled: params.enabled,
+            }
+            .into(),
+        ))
     }
 
     pub(crate) async fn turn_settings_update(

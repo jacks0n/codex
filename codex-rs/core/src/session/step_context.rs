@@ -14,10 +14,12 @@ use codex_exec_server::ResolvedSelectedCapabilityRoot;
 use codex_mcp::McpBinding;
 use codex_otel::SessionTelemetry;
 use codex_protocol::items::ModelInvocationContext;
+use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::TurnContextItem;
 use tokio_util::sync::CancellationToken;
 
 /// Request-scoped state that may change between model sampling requests.
+#[derive(Clone)]
 pub(crate) struct StepContext {
     pub(crate) turn: Arc<TurnContext>,
     /// Preempts this request and yields its code-mode observations when user input arrives.
@@ -60,5 +62,18 @@ impl StepContext {
                 .effective_reasoning_effort()
                 .map(|effort| effort.to_string()),
         }
+    }
+
+    pub(crate) fn approval_policy(&self) -> AskForApproval {
+        self.turn
+            .effective_approval_policy(self.settings.approval_policy())
+    }
+
+    pub(crate) fn with_runtime_permissions(&self) -> Self {
+        let mut context = self.clone();
+        if self.turn.runtime_full_access.is_enabled() {
+            context.environments = context.environments.with_full_access();
+        }
+        context
     }
 }

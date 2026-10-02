@@ -1124,12 +1124,15 @@ impl App {
         if started.blocks_direct_input {
             self.mark_primary_thread_parent_owned(started.session.thread_id);
         }
+        let thread_id = started.session.thread_id;
+        let runtime_full_access = started.runtime_full_access;
         self.enqueue_primary_thread_session_with_presentation(
             started.session,
             started.turns,
             presentation,
         )
         .await?;
+        self.observe_full_access(thread_id, runtime_full_access);
         Ok(())
     }
 

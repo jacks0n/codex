@@ -29,7 +29,6 @@ use codex_features::Features;
 use codex_hooks::HooksConfig;
 use codex_model_provider::create_model_provider;
 use codex_protocol::ResponseItemId;
-use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EnvironmentConfig;
@@ -3355,16 +3354,8 @@ async fn prompt_mode_waits_for_approval_when_annotations_do_not_require_approval
 
 #[tokio::test]
 async fn full_access_mode_skips_mcp_tool_approval_for_all_approval_modes() {
-    let (session, mut turn_context) = make_session_and_context().await;
-    Arc::make_mut(&mut turn_context.config)
-        .permissions
-        .approval_policy
-        .set(AskForApproval::Never)
-        .expect("test setup should allow updating approval policy");
-    Arc::make_mut(&mut turn_context.config)
-        .permissions
-        .set_permission_profile(PermissionProfile::Disabled)
-        .expect("test setup should allow updating permission profile");
+    let (session, turn_context) = make_session_and_context().await;
+    turn_context.runtime_full_access.set_enabled(true);
 
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context);
