@@ -27,9 +27,12 @@ use codex_config::types::McpServerConfig;
 use codex_config::types::McpServerToolConfig;
 use codex_features::Features;
 use codex_hooks::HooksConfig;
+use codex_mcp::McpPluginAttribution;
+use codex_mcp::McpServerRegistration;
+use codex_mcp::ResolvedMcpCatalog;
+use codex_mcp::codex_apps_mcp_server_config;
 use codex_model_provider::create_model_provider;
 use codex_protocol::ResponseItemId;
-use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EnvironmentConfig;
@@ -199,6 +202,7 @@ fn non_apps_tool_does_not_require_account_metadata(meta: JsonValue) {
 
 fn mcp_turn_metadata_context(turn_context: &TurnContext) -> ExecutionMetadata<'_> {
     ExecutionMetadata {
+        sandbox_tags: None,
         model: turn_context.model_info().slug.as_str(),
         reasoning_effort: turn_context.effective_reasoning_effort(),
         node_repl_disabled: turn_context.model_info().node_repl_disabled,
@@ -3468,16 +3472,22 @@ async fn prompt_mode_waits_for_approval_when_annotations_do_not_require_approval
 
 #[tokio::test]
 async fn full_access_mode_skips_mcp_tool_approval_for_all_approval_modes() {
-    let (session, mut turn_context) = make_session_and_context().await;
-    Arc::make_mut(&mut turn_context.config)
-        .permissions
-        .approval_policy
-        .set(AskForApproval::Never)
-        .expect("test setup should allow updating approval policy");
-    Arc::make_mut(&mut turn_context.config)
-        .permissions
-        .set_permission_profile(PermissionProfile::Disabled)
-        .expect("test setup should allow updating permission profile");
+    let (session, turn_context) = make_session_and_context().await;
+    turn_context
+        .runtime_full_access
+        .store(/*val*/ true, std::sync::atomic::Ordering::Release);
+    let mut config = approval_config(&turn_context);
+    let mut catalog = config.mcp_server_catalog.to_builder();
+    catalog.register(McpServerRegistration::from_hosted_apps(
+        "test-apps",
+        /*contribution_order*/ 0,
+        codex_apps_mcp_server_config(
+            "https://example.com",
+            /*apps_mcp_product_sku*/ None,
+            /*originator*/ None,
+        ),
+    ));
+    config.mcp_server_catalog = catalog.build();
 
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context);
@@ -3516,7 +3526,7 @@ async fn full_access_mode_skips_mcp_tool_approval_for_all_approval_modes() {
             &ToolName::namespaced(&invocation.server, &invocation.tool),
             &HookToolName::new("mcp__test__tool"),
             &metadata,
-            &approval_config(&turn_context),
+            &config,
             turn_context.config.permissions.permission_profile(),
             McpToolApprovalPolicy::for_server(approval_mode),
         )
@@ -3524,6 +3534,119 @@ async fn full_access_mode_skips_mcp_tool_approval_for_all_approval_modes() {
 
         assert_eq!(decision, None);
     }
+}
+
+#[tokio::test]
+async fn runtime_full_access_respects_each_mcp_servers_environment_owner() {
+    let (_, turn) = make_session_and_context().await;
+    let mut environments = turn.initial_environments.clone();
+    let mut owner = environments.primary().expect("primary environment").clone();
+    owner.selection.environment_id = "owner".to_string();
+    owner.config_origin = EnvironmentConfigOrigin::Owner;
+    environments
+        .environments
+        .push(TurnEnvironmentState::Ready(owner));
+    let mut owner_only = environments.clone();
+    owner_only.environments.remove(/*index*/ 0);
+    let mut local_owner = turn.initial_environments.clone();
+    let TurnEnvironmentState::Ready(local) = &mut local_owner.environments[0] else {
+        panic!("expected ready local environment");
+    };
+    local.config_origin = EnvironmentConfigOrigin::Owner;
+
+    let server_config = |environment_id: &str| {
+        let mut server = codex_apps_mcp_server_config(
+            "https://example.com",
+            /*apps_mcp_product_sku*/ None,
+            /*originator*/ None,
+        );
+        server.environment_id = environment_id.to_string();
+        server
+    };
+    let mut catalog = ResolvedMcpCatalog::builder();
+    for environment_id in ["local", "owner", "missing"] {
+        catalog.register(McpServerRegistration::from_config(
+            environment_id.to_string(),
+            server_config(environment_id),
+        ));
+    }
+    for (server, environment_id) in [("selected", "missing"), ("selected-owner", "owner")] {
+        catalog.register(McpServerRegistration::from_selected_plugin(
+            server.to_string(),
+            McpPluginAttribution::new("selected@test".to_string(), "Selected".to_string()),
+            /*selection_order*/ 0,
+            codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID,
+            server_config(environment_id),
+        ));
+    }
+    catalog.register(McpServerRegistration::from_plugin(
+        "installed".to_string(),
+        McpPluginAttribution::new("installed@test".to_string(), "Installed".to_string()),
+        /*plugin_order*/ 0,
+        server_config("missing"),
+    ));
+    catalog.register(McpServerRegistration::from_hosted_apps(
+        "test-apps",
+        /*contribution_order*/ 0,
+        server_config("local"),
+    ));
+    let mut config = approval_config(&turn);
+    config.mcp_server_catalog = catalog.build();
+    let configured = PermissionProfile::read_only();
+    assert_eq!(
+        environments
+            .clone()
+            .with_full_access()
+            .turn_environments()
+            .map(|environment| environment.permission_profile().clone())
+            .collect::<Vec<_>>(),
+        vec![
+            PermissionProfile::Disabled,
+            owner_only
+                .primary()
+                .expect("owner environment")
+                .permission_profile()
+                .clone(),
+        ],
+    );
+    for (server, environments, full_access) in [
+        ("local", &environments, PermissionProfile::Disabled),
+        ("owner", &environments, configured.clone()),
+        ("selected-owner", &environments, configured.clone()),
+        ("missing", &environments, configured.clone()),
+        ("unregistered", &environments, configured.clone()),
+        ("local", &owner_only, PermissionProfile::Disabled),
+        ("selected", &owner_only, PermissionProfile::Disabled),
+        ("installed", &owner_only, configured.clone()),
+        ("local", &local_owner, configured.clone()),
+        (
+            CODEX_APPS_MCP_SERVER_NAME,
+            &local_owner,
+            PermissionProfile::Disabled,
+        ),
+    ] {
+        for (enabled, expected) in [(true, full_access), (false, configured.clone())] {
+            turn.runtime_full_access
+                .store(enabled, std::sync::atomic::Ordering::Release);
+            assert_eq!(
+                turn.effective_permission_profile(
+                    mcp_config_origin(environments, &config, server),
+                    configured.clone(),
+                ),
+                expected,
+                "server {server}, Full Access {enabled}",
+            );
+        }
+    }
+    turn.runtime_full_access
+        .store(/*val*/ true, std::sync::atomic::Ordering::Release);
+    let step = StepContext::for_test(Arc::new(turn));
+    let metadata = step
+        .turn
+        .turn_metadata_state
+        .current_meta_value_for_mcp_request(ExecutionMetadata::from_step_context(&step))
+        .expect("turn metadata");
+    assert_eq!(metadata["sandbox_mode"], "danger-full-access");
 }
 
 #[tokio::test]

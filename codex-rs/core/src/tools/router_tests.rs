@@ -44,6 +44,96 @@ use super::tool_log_payload;
 
 struct ExtensionEchoContributor;
 
+struct CaptureStepRuntime(std::sync::Mutex<Option<Arc<StepContext>>>);
+
+impl crate::tools::registry::ToolExecutor<crate::tools::context::ToolInvocation>
+    for CaptureStepRuntime
+{
+    fn tool_name(&self) -> ToolName {
+        ToolName::plain(crate::tools::code_mode::PUBLIC_TOOL_NAME).with_default_namespace()
+    }
+
+    fn spec(&self) -> ToolSpec {
+        ToolSpec::Function(codex_tools::ResponsesApiTool {
+            name: self.tool_name().name,
+            description: "Capture the context retained by a cell".to_string(),
+            strict: false,
+            defer_loading: None,
+            parameters: Default::default(),
+            output_schema: None,
+        })
+    }
+
+    fn handle<'a>(
+        &'a self,
+        invocation: crate::tools::context::ToolInvocation,
+    ) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        crate::tools::context::ToolInvocation: 'a,
+    {
+        Box::pin(async move {
+            *self.0.lock().unwrap() = Some(invocation.step_context);
+            Ok(
+                Box::new(crate::tools::context::FunctionToolOutput::from_text(
+                    "captured".to_string(),
+                    /*success*/ Some(true),
+                )) as Box<dyn crate::tools::context::ToolOutput>,
+            )
+        })
+    }
+}
+
+impl CoreToolRuntime for CaptureStepRuntime {}
+
+#[tokio::test]
+async fn code_mode_cells_restore_permissions_for_nested_tools_after_full_access_is_disabled()
+-> anyhow::Result<()> {
+    let (session, turn) = make_session_and_context().await;
+    let configured = turn.permission_profile();
+    let turn = Arc::new(turn);
+    let step = StepContext::for_test(Arc::clone(&turn));
+    let handler = Arc::new(CaptureStepRuntime(std::sync::Mutex::new(None)));
+    let router = ToolRouter::from_registry(
+        &turn,
+        turn.model_info(),
+        crate::tools::registry::ToolRegistry::with_handler_for_test(handler.clone()),
+        Vec::new(),
+        &Default::default(),
+    );
+    turn.runtime_full_access
+        .store(/*val*/ true, std::sync::atomic::Ordering::Release);
+    router
+        .dispatch_tool_call_with_code_mode_result(
+            Arc::new(session),
+            step,
+            CancellationToken::new(),
+            Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
+            ToolCall {
+                tool_name: handler.tool_name(),
+                call_id: "cell".to_string(),
+                payload: ToolPayload::Function {
+                    arguments: "{}".to_string(),
+                },
+                encrypted_function_args: None,
+            },
+            ToolCallSource::Direct,
+        )
+        .await?;
+    turn.runtime_full_access
+        .store(/*val*/ false, std::sync::atomic::Ordering::Release);
+    let retained = handler.0.lock().unwrap().take().expect("cell context");
+    assert_eq!(
+        retained
+            .with_runtime_permissions()
+            .environments
+            .primary()
+            .expect("environment")
+            .permission_profile(),
+        &configured
+    );
+    Ok(())
+}
+
 #[test]
 fn tool_log_payload_redacts_plaintext_multi_agent_messages() {
     let payload = ToolPayload::Function {

@@ -204,7 +204,7 @@ impl ExecCommandHandler {
                     turn_environment.config().windows_sandbox_type,
                     turn_environment.config().windows_sandbox_level,
                 ),
-                turn.network.is_some(),
+                turn.network_for_environment(turn_environment).is_some(),
             ) != SandboxType::None;
         // `to_abs_path()` alone cannot identify foreign drive paths: `file:///C:/repo` is
         // representable as `/C:/repo` on POSIX. Require the inferred convention to match too.
@@ -319,7 +319,7 @@ impl ExecCommandHandler {
 
         // Sticky turn permissions have already been approved, so they should
         // continue through the normal exec approval flow for the command.
-        let approval_policy = context.step_context.settings.approval_policy();
+        let approval_policy = context.step_context.approval_policy();
         if effective_additional_permissions
             .sandbox_permissions
             .requests_sandbox_override()
@@ -406,7 +406,11 @@ impl ExecCommandHandler {
             cwd,
             sandbox_cwd: native_environment_cwd,
             turn_environment: turn_environment.clone(),
-            network: context.step_context.turn.network.clone(),
+            network: context
+                .step_context
+                .turn
+                .network_for_environment(turn_environment)
+                .cloned(),
             tty,
             sandbox_permissions: effective_additional_permissions.sandbox_permissions,
             additional_permissions: normalized_additional_permissions,

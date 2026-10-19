@@ -51,6 +51,7 @@ use tokio::process::Command;
 
 fn test_mcp_turn_metadata_context() -> ExecutionMetadata<'static> {
     ExecutionMetadata {
+        sandbox_tags: None,
         model: "gpt-5.4",
         reasoning_effort: Some(ReasoningEffortConfig::High),
         node_repl_disabled: false,
@@ -561,6 +562,7 @@ fn turn_metadata_state_includes_model_and_reasoning_effort_only_in_request_meta(
 
     let meta_without_reasoning_effort = state
         .current_meta_value_for_mcp_request(ExecutionMetadata {
+            sandbox_tags: None,
             model: "gpt-5.4",
             reasoning_effort: None,
             node_repl_disabled: false,
@@ -586,6 +588,23 @@ async fn execution_metadata_applies_captured_settings_to_responses_metadata() {
     config.approvals_reviewer = codex_protocol::config_types::ApprovalsReviewer::AutoReview;
     config.permissions.approval_policy =
         crate::config::Constrained::allow_any(codex_protocol::protocol::AskForApproval::OnRequest);
+    config
+        .permissions
+        .set_permission_profile(PermissionProfile::workspace_write_with(
+            &[],
+            codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
+            /*exclude_tmpdir_env_var*/ true,
+            /*exclude_slash_tmp*/ true,
+        ))
+        .expect("workspace permissions");
+    config
+        .permissions
+        .set_workspace_roots(vec![config.cwd.clone()]);
+    #[cfg(windows)]
+    {
+        config.permissions.windows_sandbox_type = SandboxType::WindowsMxc;
+    }
+    turn.initial_environments.environments.clear();
     update_turn_settings_for_test(&mut turn, |settings| {
         let model_info = Arc::make_mut(&mut settings.model_info);
         model_info.slug = "captured-step-model".to_string();
@@ -600,12 +619,44 @@ async fn execution_metadata_applies_captured_settings_to_responses_metadata() {
         CodexResponsesRequestKind::Turn,
     );
     ExecutionMetadata::from_settings(&step_context.settings).apply_to(&mut metadata);
+    let baseline_metadata = metadata.clone();
     let metadata = metadata.turn_metadata_value().expect("turn metadata");
 
     assert_eq!(metadata["model"], "captured-step-model");
     assert_eq!(metadata[AUTO_REVIEW_ENABLED_KEY], true);
     assert_eq!(metadata[NODE_REPL_AUTO_REVIEW_REQUIRED_KEY], true);
     assert_eq!(metadata[NODE_REPL_DISABLED_KEY], true);
+    for enabled in [false, true, false] {
+        step_context
+            .turn
+            .runtime_full_access
+            .store(enabled, Ordering::Release);
+        let mut metadata = baseline_metadata.clone();
+        ExecutionMetadata::from_step_context(&step_context).apply_to(&mut metadata);
+        let sandbox = if enabled {
+            "none"
+        } else if cfg!(windows) {
+            "windows_mxc"
+        } else {
+            get_platform_sandbox(/*windows_sandbox_enabled*/ false)
+                .map(SandboxType::as_metric_tag)
+                .unwrap_or("none")
+        };
+        assert_eq!(
+            (
+                metadata.sandbox_mode.as_deref(),
+                metadata.sandbox.as_deref()
+            ),
+            (
+                Some(if enabled {
+                    "danger-full-access"
+                } else {
+                    "workspace-write"
+                }),
+                Some(sandbox)
+            ),
+        );
+    }
 }
 
 #[test]

@@ -292,7 +292,7 @@ impl StepContext {
             inherited_environments: environments.clone(),
             environments,
             executor_hook_sources: Vec::new(),
-            extension_data: codex_extension_api::ExtensionData::new(turn.sub_id.clone()),
+            extension_data: Arc::new(codex_extension_api::ExtensionData::new(turn.sub_id.clone())),
             mcp: Arc::new(codex_mcp::McpBinding::empty(mcp_config_for_test(
                 &turn.config,
             ))),
@@ -1499,8 +1499,14 @@ async fn danger_full_access_turns_do_not_expose_managed_network_proxy() -> anyho
     Ok(())
 }
 
+#[test_case::test_case(PermissionProfile::Disabled, false; "configured")]
+#[test_case::test_case(PermissionProfile::workspace_write(), false; "runtime")]
+#[test_case::test_case(PermissionProfile::workspace_write(), true; "runtime_with_denied_reads")]
 #[tokio::test]
-async fn danger_full_access_tool_attempts_do_not_enforce_managed_network() -> anyhow::Result<()> {
+async fn danger_full_access_tool_attempts_do_not_enforce_managed_network(
+    permission_profile: PermissionProfile,
+    denied_reads: bool,
+) -> anyhow::Result<()> {
     #[derive(Default)]
     struct ProbeToolRuntime {
         enforce_managed_network: Vec<bool>,
@@ -1550,20 +1556,26 @@ async fn danger_full_access_tool_attempts_do_not_enforce_managed_network() -> an
         }
     }
 
+    let configured_full_access = permission_profile == PermissionProfile::Disabled;
     let network_spec = crate::config::NetworkProxySpec::from_config_and_constraints(
         NetworkProxyConfig::default(),
         Some(NetworkConstraints {
             enabled: Some(true),
             ..Default::default()
         }),
-        &PermissionProfile::Disabled,
+        &permission_profile,
     )?;
 
     let session = make_session_with_config(move |config| {
         config
             .permissions
-            .set_permission_profile(PermissionProfile::Disabled)
+            .set_permission_profile(permission_profile)
             .expect("test setup should allow permission profile");
+        config
+            .permissions
+            .approval_policy
+            .set(AskForApproval::Never)
+            .expect("allow probe without approval");
         config.permissions.network = Some(network_spec);
 
         let layers = config
@@ -1589,31 +1601,66 @@ async fn danger_full_access_tool_attempts_do_not_enforce_managed_network() -> an
     })
     .await?;
 
-    let turn = session.new_default_turn().await;
-    assert!(turn.network.is_none());
-
-    let mut orchestrator = crate::tools::orchestrator::ToolOrchestrator::new();
+    let runtime = session.services.local_agent_runtime.runtime_full_access();
     let mut tool = ProbeToolRuntime::default();
-    let tool_ctx = crate::tools::sandboxing::ToolCtx {
-        cancellation_token: CancellationToken::new(),
-        session: Arc::clone(&session),
-        step_context: StepContext::for_test(Arc::clone(&turn)),
-        call_id: "probe-call".to_string(),
-        tool_name: codex_tools::ToolName::plain("probe"),
-    };
-
-    orchestrator
-        .run(
-            &mut tool,
-            turn.initial_environments
-                .primary()
-                .expect("turn should have a primary environment"),
-            &tool_ctx,
-        )
-        .await
-        .expect("probe runtime should succeed");
-
-    assert_eq!(tool.enforce_managed_network, vec![false]);
+    for initially_enabled in [false, true] {
+        runtime.store(initially_enabled, std::sync::atomic::Ordering::Release);
+        let turn = session.new_default_turn().await;
+        let mut original_step = StepContext::for_test(Arc::clone(&turn));
+        if denied_reads {
+            let step = Arc::get_mut(&mut original_step).expect("unshared step");
+            let TurnEnvironmentState::Ready(environment) = &mut step.environments.environments[0]
+            else {
+                panic!("ready primary environment");
+            };
+            let configured = environment.permission_profile();
+            let mut file_system = configured.file_system_sandbox_policy();
+            file_system.entries.push(FileSystemSandboxEntry {
+                path: FileSystemPath::GlobPattern {
+                    pattern: "**/*.env".to_string(),
+                },
+                access: FileSystemAccessMode::Deny,
+                missing_path_behavior: None,
+            });
+            environment.config_mut().permission_profile = PermissionProfileSnapshot::legacy(
+                PermissionProfile::from_runtime_permissions_with_enforcement(
+                    configured.enforcement(),
+                    &file_system,
+                    configured.network_sandbox_policy(),
+                ),
+            );
+        }
+        for enabled in [initially_enabled, !initially_enabled] {
+            runtime.store(enabled, std::sync::atomic::Ordering::Release);
+            let tool_ctx = crate::tools::sandboxing::ToolCtx {
+                cancellation_token: CancellationToken::new(),
+                session: Arc::clone(&session),
+                step_context: Arc::new(original_step.with_runtime_permissions()),
+                call_id: "probe-call".to_string(),
+                tool_name: codex_tools::ToolName::plain("probe"),
+            };
+            crate::tools::orchestrator::ToolOrchestrator::new()
+                .run(
+                    &mut tool,
+                    tool_ctx
+                        .step_context
+                        .environments
+                        .primary()
+                        .expect("primary environment"),
+                    &tool_ctx,
+                )
+                .await
+                .expect("probe runtime should succeed");
+        }
+    }
+    assert_eq!(
+        tool.enforce_managed_network,
+        if configured_full_access {
+            vec![false, false, false, false]
+        } else {
+            vec![true, false, false, true]
+        }
+    );
 
     Ok(())
 }
@@ -7059,6 +7106,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
             Arc::new(model_info),
             &config.features,
         )),
+        session.services.local_agent_runtime.runtime_full_access(),
         &models_manager,
         /*network*/ None,
         resolved_turn_environments,
@@ -9332,6 +9380,7 @@ where
             Arc::new(model_info),
             &config.features,
         )),
+        session.services.local_agent_runtime.runtime_full_access(),
         &models_manager,
         /*network*/ None,
         resolved_turn_environments,
@@ -11100,7 +11149,12 @@ async fn turn_context_item_stores_local_cwd() {
 
 #[tokio::test]
 async fn turn_context_item_omits_legacy_equivalent_file_system_sandbox_policy() {
-    let (_session, turn_context) = make_session_and_context().await;
+    let (_session, mut turn_context) = make_session_and_context().await;
+    Arc::make_mut(&mut turn_context.config)
+        .permissions
+        .approval_policy
+        .set(AskForApproval::UnlessTrusted)
+        .expect("configured approval policy");
 
     let item = turn_context.to_turn_context_item();
 
@@ -11109,6 +11163,11 @@ async fn turn_context_item_omits_legacy_equivalent_file_system_sandbox_policy() 
         item.permission_profile,
         Some(turn_context.permission_profile())
     );
+    turn_context
+        .runtime_full_access
+        .store(/*val*/ true, std::sync::atomic::Ordering::Release);
+    assert_eq!(turn_context.approval_policy(), AskForApproval::Never);
+    assert_eq!(turn_context.to_turn_context_item(), item);
 }
 
 #[tokio::test]
@@ -11165,6 +11224,21 @@ async fn turn_context_item_stores_split_file_system_sandbox_policy_when_differen
         item.permission_profile,
         Some(turn_context.permission_profile())
     );
+    turn_context
+        .runtime_full_access
+        .store(/*val*/ true, std::sync::atomic::Ordering::Release);
+    #[allow(deprecated)]
+    let cwd = &turn_context.cwd;
+    let effective = turn_context
+        .permission_profile()
+        .file_system_sandbox_policy();
+    assert!(
+        codex_protocol::permissions::ReadDenyMatcher::try_new_for_local_paths(&effective, cwd)
+            .expect("valid read restrictions")
+            .expect("read deny matcher")
+            .is_local_path_read_denied(&cwd.join("secret.env"))
+    );
+    assert!(effective.can_write_local_path_with_cwd(&cwd.join("output.txt"), cwd));
 }
 
 #[tokio::test]

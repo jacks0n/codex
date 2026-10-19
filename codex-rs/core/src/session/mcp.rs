@@ -44,6 +44,7 @@ use codex_rmcp_client::Elicitation;
 use rmcp::model::ElicitationAction;
 use rmcp::model::RequestMetaObject;
 use serde_json::Map;
+use std::sync::atomic::Ordering;
 
 const MCP_ELICITATION_DECLINE_MESSAGE_KEY: &str = "message";
 const TOOL_SUGGESTION_ACTION_INSTALL: &str = "install";
@@ -86,6 +87,47 @@ impl GuardianMcpElicitationReviewer {
 }
 
 impl ElicitationReviewer for GuardianMcpElicitationReviewer {
+    fn effective_permissions(
+        &self,
+        config: Arc<McpConfig>,
+        request: ElicitationReviewRequest,
+    ) -> BoxFuture<'static, Option<(AskForApproval, codex_protocol::models::PermissionProfile)>>
+    {
+        let session = self.session.clone();
+        Box::pin(async move {
+            let configured = config.permission_profile_for_server(&request.server_name)?;
+            let captured = (config.approval_policy.value(), configured.clone());
+            let Some(session) = session.upgrade() else {
+                return Some(captured);
+            };
+            let Some((turn, cancellation_token)) =
+                session.active_turn_context_and_cancellation_token().await
+            else {
+                return Some(captured);
+            };
+            if cancellation_token.is_cancelled() {
+                return None;
+            }
+            let approval_context = mcp_elicitation_call_id(&request).and_then(|call_id| {
+                session.mcp_tool_approval_metadata(&request.server_name, call_id)
+            });
+            let environments = approval_context
+                .as_ref()
+                .map_or(&turn.initial_environments, |context| {
+                    context.review_context.environments()
+                });
+            let config_origin = crate::runtime_permissions::mcp_config_origin(
+                environments,
+                &config,
+                &request.server_name,
+            );
+            Some((
+                turn.effective_approval_policy(captured.0),
+                turn.effective_permission_profile(config_origin, captured.1),
+            ))
+        })
+    }
+
     fn review(
         &self,
         request: ElicitationReviewRequest,
@@ -918,6 +960,17 @@ impl Session {
     }
 }
 
+fn mcp_elicitation_call_id(request: &ElicitationReviewRequest) -> Option<&str> {
+    request
+        .elicitation
+        .meta()
+        .and_then(|meta| match request.server_name.as_str() {
+            CODEX_APPS_MCP_SERVER_NAME => meta.get(MCP_TOOL_CODEX_APPS_META_KEY)?.get("call_id"),
+            _ => meta.get("callId"),
+        })
+        .and_then(Value::as_str)
+}
+
 async fn review_guardian_mcp_elicitation(
     session: Arc<Session>,
     request: ElicitationReviewRequest,
@@ -932,6 +985,13 @@ async fn review_guardian_mcp_elicitation(
         return Ok(None);
     };
     let step_settings = turn_context.next_step_settings.load_full();
+    let runtime_environments = turn_context
+        .runtime_full_access
+        .load(Ordering::Acquire)
+        .then(|| turn_context.initial_environments.clone().with_full_access());
+    let environments = runtime_environments
+        .as_ref()
+        .unwrap_or(&turn_context.initial_environments);
 
     // User approval skips ordinary CUA checks, not separate sensitive requests.
     let user_cua_execution = step_settings.approvals_reviewer() == ApprovalsReviewer::User
@@ -947,12 +1007,9 @@ async fn review_guardian_mcp_elicitation(
 
     // Full Access skips inference, not the active-turn and cancellation checks.
     if (user_cua_execution
-        || turn_context.initial_environments.has_full_access(
+        || environments.has_full_access(
             turn_context.approval_policy(),
-            &turn_context
-                .config
-                .permissions
-                .effective_permission_profile(),
+            &turn_context.permission_profile(),
         ))
         && matches!(
             &request.elicitation,
@@ -974,14 +1031,7 @@ async fn review_guardian_mcp_elicitation(
 
     // The invocation identifies the tool event, but a nested elicitation can
     // review a different action and connector than the enclosing JavaScript.
-    let call_id = request
-        .elicitation
-        .meta()
-        .and_then(|meta| match request.server_name.as_str() {
-            CODEX_APPS_MCP_SERVER_NAME => meta.get(MCP_TOOL_CODEX_APPS_META_KEY)?.get("call_id"),
-            _ => meta.get("callId"),
-        })
-        .and_then(Value::as_str);
+    let call_id = mcp_elicitation_call_id(&request);
     let approval_context = call_id
         .and_then(|call_id| session.mcp_tool_approval_metadata(&request.server_name, call_id));
     let (originating_call_id, guardian_scope) = if let Some(call_id) = call_id

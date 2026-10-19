@@ -333,6 +333,8 @@ pub struct TurnContext {
     pub(crate) configured_token_budget: Option<TokenBudgetConfig>,
     /// Captured once so later steps do not re-read config layers to detect user preferences.
     pub(crate) use_model_token_budget_defaults: bool,
+    /// Runtime Full Access state shared by the root thread and all of its agents.
+    pub(crate) runtime_full_access: Arc<AtomicBool>,
     pub(crate) auth_manager: Option<Arc<AuthManager>>,
     /// Frozen settings used to construct this context. Legacy turn consumers
     /// keep this view even when later steps use different settings.
@@ -428,6 +430,7 @@ impl TurnContext {
             configured_token_budget: config.token_budget.clone(),
             use_model_token_budget_defaults: config.features.enabled(Feature::TokenBudget)
                 && !has_explicit_settings(&config),
+            runtime_full_access: Arc::clone(&self.runtime_full_access),
             config,
             auth_manager: self.auth_manager.clone(),
             initial_settings: Arc::clone(&step_settings),
@@ -665,10 +668,18 @@ impl TurnContext {
             .await
     }
 
-    /// Legacy: returns the frozen initial-turn approval policy.
-    /// Step-scoped consumers should use their captured `StepContext::settings`.
+    /// Returns the initial-turn approval policy with the live Full Access override.
+    /// Step-scoped consumers should use `StepContext::approval_policy`.
     pub(crate) fn approval_policy(&self) -> AskForApproval {
-        self.config.permissions.approval_policy.value()
+        self.effective_approval_policy(self.config.permissions.approval_policy.value())
+    }
+
+    pub(crate) fn effective_approval_policy(&self, configured: AskForApproval) -> AskForApproval {
+        if self.runtime_full_access.load(Ordering::Acquire) {
+            AskForApproval::Never
+        } else {
+            configured
+        }
     }
 
     /// Legacy: returns the frozen initial-turn prefix-rule policy.
@@ -713,8 +724,29 @@ impl TurnContext {
 
     /// Returns the selected environment's permissions, or the thread's permissions when none is ready.
     pub(crate) fn permission_profile(&self) -> PermissionProfile {
-        self.initial_environments
-            .permission_profile_or_else(|| self.config.permissions.effective_permission_profile())
+        let configured = self
+            .initial_environments
+            .permission_profile_or_else(|| self.config.permissions.effective_permission_profile());
+        self.effective_permission_profile(
+            self.initial_environments
+                .primary_config_origin()
+                .or(Some(EnvironmentConfigOrigin::Thread)),
+            configured,
+        )
+    }
+
+    pub(crate) fn effective_permission_profile(
+        &self,
+        config_origin: Option<EnvironmentConfigOrigin>,
+        configured: PermissionProfile,
+    ) -> PermissionProfile {
+        if self.runtime_full_access.load(Ordering::Acquire)
+            && config_origin == Some(EnvironmentConfigOrigin::Thread)
+        {
+            crate::runtime_permissions::full_access_profile(&configured)
+        } else {
+            configured
+        }
     }
 
     /// Uses this selection's permissions, or the turn's thread defaults for these folders.
@@ -722,7 +754,7 @@ impl TurnContext {
         &self,
         environments: &TurnEnvironmentSnapshot,
     ) -> PermissionProfile {
-        environments.permission_profile_or_else(|| {
+        let configured = environments.permission_profile_or_else(|| {
             self.config
                 .permissions
                 .permission_profile()
@@ -730,15 +762,30 @@ impl TurnContext {
                 .materialize_project_roots_with_path_uris(
                     environments.primary_workspace_root_uris(),
                 )
-        })
-    }
-
-    pub(crate) fn file_system_sandbox_policy(&self) -> FileSystemSandboxPolicy {
-        self.permission_profile().file_system_sandbox_policy()
+        });
+        self.effective_permission_profile(
+            environments
+                .primary_config_origin()
+                .or(Some(EnvironmentConfigOrigin::Thread)),
+            configured,
+        )
     }
 
     pub(crate) fn network_sandbox_policy(&self) -> NetworkSandboxPolicy {
         self.permission_profile().network_sandbox_policy()
+    }
+
+    pub(crate) fn network_for_environment(
+        &self,
+        environment: &TurnEnvironment,
+    ) -> Option<&NetworkProxy> {
+        self.network.as_ref().filter(|_| {
+            !(self.runtime_full_access.load(Ordering::Acquire)
+                && environment.config_origin == EnvironmentConfigOrigin::Thread)
+                && Session::managed_network_proxy_active_for_permission_profile(
+                    environment.permission_profile(),
+                )
+        })
     }
 
     pub(crate) fn sandbox_policy(&self) -> SandboxPolicy {
@@ -841,6 +888,7 @@ impl TurnContext {
             config: Arc::new(config),
             configured_token_budget: self.configured_token_budget.clone(),
             use_model_token_budget_defaults: self.use_model_token_budget_defaults,
+            runtime_full_access: Arc::clone(&self.runtime_full_access),
             auth_manager: self.auth_manager.clone(),
             initial_settings: Arc::clone(&step_settings),
             disabled_plugin_ids: self.disabled_plugin_ids.clone(),
@@ -881,18 +929,25 @@ impl TurnContext {
         }
     }
 
-    fn non_legacy_file_system_sandbox_policy(&self) -> Option<RawFileSystemSandboxPolicy> {
+    fn non_legacy_file_system_sandbox_policy(
+        &self,
+        permission_profile: &PermissionProfile,
+    ) -> Option<RawFileSystemSandboxPolicy> {
+        #[allow(deprecated)]
+        let cwd = &self.cwd;
         // Omit the derived split filesystem policy when it is equivalent to
         // the legacy sandbox policy. This keeps turn-context payloads stable
         // while both fields exist; once callers consume only the split policy,
         // this comparison and the legacy projection should go away.
         let legacy_file_system_sandbox_policy =
             FileSystemSandboxPolicy::from_legacy_sandbox_policy_for_cwd(
-                &self.sandbox_policy(),
-                #[allow(deprecated)]
-                &self.cwd,
+                &codex_sandboxing::compatibility_sandbox_policy_for_permission_profile(
+                    permission_profile,
+                    cwd,
+                ),
+                cwd,
             );
-        let file_system_sandbox_policy = self.file_system_sandbox_policy();
+        let file_system_sandbox_policy = permission_profile.file_system_sandbox_policy();
         // `permission_profile` below is authoritative and serializes the same
         // runtime entries, so this compatibility field may omit an unrenderable policy.
         (file_system_sandbox_policy != legacy_file_system_sandbox_policy)
@@ -903,20 +958,30 @@ impl TurnContext {
     pub(crate) fn to_turn_context_item(&self) -> TurnContextItem {
         #[allow(deprecated)]
         let cwd = self.cwd.clone();
+        // Runtime Full Access must never become a saved permission choice on resume.
+        let permission_profile = self
+            .initial_environments
+            .permission_profile_or_else(|| self.config.permissions.effective_permission_profile());
+        let sandbox_policy = codex_sandboxing::compatibility_sandbox_policy_for_permission_profile(
+            &permission_profile,
+            &cwd,
+        );
+        let file_system_sandbox_policy =
+            self.non_legacy_file_system_sandbox_policy(&permission_profile);
         TurnContextItem {
             turn_id: Some(self.sub_id.clone()),
             root_turn_id: self.turn_metadata_state.root_turn_id(),
             disabled_plugin_ids: Some(self.disabled_plugin_ids.clone()),
             cwd,
-            approval_policy: self.approval_policy(),
+            approval_policy: self.config.permissions.approval_policy.value(),
             approvals_reviewer: Some(self.config.approvals_reviewer),
-            sandbox_policy: self.sandbox_policy(),
-            permission_profile: Some(self.permission_profile()),
+            sandbox_policy,
+            permission_profile: Some(permission_profile),
             active_permission_profile: self.initial_environments.primary().map_or_else(
                 || self.config.permissions.active_permission_profile(),
                 TurnEnvironment::active_permission_profile,
             ),
-            file_system_sandbox_policy: self.non_legacy_file_system_sandbox_policy(),
+            file_system_sandbox_policy,
             model: self.model_info().slug.clone(),
             comp_hash: self.model_info().comp_hash.clone(),
             collaboration_mode: Some(self.collaboration_mode()),
@@ -1048,6 +1113,7 @@ impl Session {
         multi_agent_version: MultiAgentVersion,
         per_turn_config: Config,
         step_settings: Arc<ResolvedStepSettings>,
+        runtime_full_access: Arc<AtomicBool>,
         models_manager: &SharedModelsManager,
         network: Option<NetworkProxy>,
         environments: TurnEnvironmentSnapshot,
@@ -1077,11 +1143,24 @@ impl Session {
             super::time_reminder::apply_persistent_defaults(&mut per_turn_config);
         }
         per_turn_config.service_tier = step_settings.service_tier.clone();
-        let permission_profile = environments.permission_profile_or_else(|| {
+        let runtime_full_access_enabled = runtime_full_access.load(Ordering::Acquire);
+        let configured_permission_profile = environments.permission_profile_or_else(|| {
             per_turn_config.permissions.effective_permission_profile()
         });
+        let permission_profile =
+            if environments.primary_config_origin() == Some(EnvironmentConfigOrigin::Owner) {
+                configured_permission_profile
+            } else if runtime_full_access_enabled {
+                crate::runtime_permissions::full_access_profile(&configured_permission_profile)
+            } else {
+                configured_permission_profile
+            };
         let auto_review_enabled = crate::guardian::routes_approval_policy_to_guardian(
-            per_turn_config.permissions.approval_policy.value(),
+            if runtime_full_access_enabled {
+                AskForApproval::Never
+            } else {
+                per_turn_config.permissions.approval_policy.value()
+            },
             per_turn_config.approvals_reviewer,
         );
         let windows_sandbox_selection = environments
@@ -1126,6 +1205,7 @@ impl Session {
             config: per_turn_config,
             configured_token_budget,
             use_model_token_budget_defaults,
+            runtime_full_access,
             auth_manager,
             initial_settings: Arc::clone(&step_settings),
             disabled_plugin_ids: session_configuration.disabled_plugin_ids.clone(),
@@ -1287,6 +1367,7 @@ impl Session {
             .map(TurnEnvironment::permission_profile)
             .cloned()
             .unwrap_or_else(|| session_configuration.permission_profile());
+        let runtime_full_access = self.services.local_agent_runtime.runtime_full_access();
         let model_info = session_configuration
             .step_settings
             .resolve_model_info(
@@ -1358,6 +1439,7 @@ impl Session {
             multi_agent_version,
             per_turn_config,
             step_settings,
+            runtime_full_access,
             &self.services.models_manager,
             self.services
                 .network_proxy

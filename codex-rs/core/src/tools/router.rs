@@ -373,6 +373,19 @@ impl ToolRouter {
             ..
         } = call;
 
+        // Resolve runtime permissions at dispatch so a live Full Access toggle also affects tool
+        // calls sampled before the toggle changed.
+        // Cells retain their configured snapshot; nested tools resolve permissions at dispatch.
+        let step_context = if crate::tools::code_mode::is_exec_tool_name(&tool_name)
+            || !step_context
+                .turn
+                .runtime_full_access
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
+            step_context
+        } else {
+            Arc::new(step_context.with_runtime_permissions())
+        };
         // Keep the legacy ToolInvocation.turn field tied to the same request state until handlers migrate.
         let turn = Arc::clone(&step_context.turn);
         let invocation = ToolInvocation {

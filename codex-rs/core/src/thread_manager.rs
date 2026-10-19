@@ -73,12 +73,16 @@ use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_models_manager::manager::RefreshStrategy;
 use codex_models_manager::manager::SharedModelsManager;
 use codex_protocol::ThreadId;
+use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::mcp::ClientMcpExtensions;
 use codex_protocol::mcp::OPENAI_STANDARD_FORM_INPUT_EXTENSION_ID;
+use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
+use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ModelPreset;
+use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InternalSessionSource;
@@ -1122,6 +1126,66 @@ impl ThreadManager {
             options, /*forked_from_thread_id*/ None, /*startup*/ None,
         ))
         .await
+    }
+
+    /// Changes the Full Access override and returns the loaded threads sharing that runtime.
+    pub async fn set_agent_tree_full_access(
+        &self,
+        thread_id: ThreadId,
+        enabled: bool,
+    ) -> CodexResult<Vec<ThreadId>> {
+        let thread = self.get_thread(thread_id).await?;
+        if enabled {
+            if thread
+                .config()
+                .await
+                .config_layer_stack
+                .requirements_toml()
+                .allowed_permission_profiles
+                .as_ref()
+                .is_some_and(|profiles| {
+                    profiles
+                        .get(BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS)
+                        .copied()
+                        != Some(true)
+                })
+            {
+                return Err(CodexErr::InvalidRequest(
+                    "Full Access is disallowed by requirements.toml allowed_permission_profiles"
+                        .to_string(),
+                ));
+            }
+            thread
+                .preview_thread_settings_overrides(CodexThreadSettingsOverrides {
+                    approval_policy: Some(AskForApproval::Never),
+                    approvals_reviewer: Some(ApprovalsReviewer::User),
+                    permission_profile: Some(PermissionProfile::Disabled),
+                    ..Default::default()
+                })
+                .await
+                .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
+        }
+        let full_access = thread
+            .session
+            .services
+            .local_agent_runtime
+            .runtime_full_access();
+        full_access.store(enabled, std::sync::atomic::Ordering::Release);
+        let threads = self.state.threads.read().await;
+        let mut affected = vec![thread_id];
+        affected.extend(threads.iter().filter_map(|(id, candidate)| {
+            (*id != thread_id
+                && Arc::ptr_eq(
+                    &full_access,
+                    &candidate
+                        .session
+                        .services
+                        .local_agent_runtime
+                        .runtime_full_access(),
+                ))
+            .then_some(*id)
+        }));
+        Ok(affected)
     }
 
     /// Starts a fresh internal session associated with an existing parent thread.

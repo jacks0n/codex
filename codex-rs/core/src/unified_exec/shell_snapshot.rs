@@ -47,7 +47,7 @@ impl Session {
         let user_shell = self.user_shell();
         if config.active_project.is_untrusted()
             || matches!(
-                step_context.settings.approval_policy(),
+                step_context.approval_policy(),
                 AskForApproval::UnlessTrusted
             )
             || step_context.turn.network.is_some()
