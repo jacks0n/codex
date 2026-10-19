@@ -339,12 +339,7 @@ impl ConfigManager {
     ) -> std::io::Result<Config> {
         match self.load_latest_config(fallback_cwd).await {
             Ok(config) => Ok(config),
-            Err(error)
-                if self.strict_config
-                    || crate::is_unsupported_untrusted_approval_policy_error(&error) =>
-            {
-                Err(error)
-            }
+            Err(error) if self.strict_config => Err(error),
             Err(error) => {
                 warn!(%error, "configuration is unavailable; using default settings");
                 self.load_default_config().await

@@ -23,6 +23,9 @@ use std::path::Path;
 #[schemars(rename = "AskForApproval")]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum ConfigAskForApproval {
+    /// Require approval unless an explicit exec policy rule allows the command.
+    Untrusted,
+
     /// The model decides when to ask the user for approval.
     OnRequest,
 
