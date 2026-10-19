@@ -1138,6 +1138,7 @@ async fn fresh_startup_thread_drains_buffered_approval_before_draft_handoff() ->
                 turns: Vec::new(),
                 blocks_direct_input: false,
                 task_tools_available: false,
+                runtime_full_access: Some(false),
             }),
         },
     ))
@@ -1353,6 +1354,7 @@ async fn startup_thread_started_submits_queued_startup_input() {
             turns: Vec::new(),
             blocks_direct_input: false,
             task_tools_available: false,
+            runtime_full_access: Some(false),
         }),
     )
     .await
@@ -1391,6 +1393,7 @@ async fn fresh_startup_notice_follows_session_attachment() {
             turns: Vec::new(),
             blocks_direct_input: false,
             task_tools_available: false,
+            runtime_full_access: Some(false),
         }),
     )
     .await
@@ -1536,6 +1539,7 @@ async fn startup_thread_started_discards_another_threads_buffered_events() {
             turns: Vec::new(),
             blocks_direct_input: false,
             task_tools_available: false,
+            runtime_full_access: Some(false),
         }),
     )
     .await
@@ -1585,6 +1589,7 @@ async fn startup_thread_started_does_not_replay_resolved_approval() -> Result<()
             turns: Vec::new(),
             blocks_direct_input: false,
             task_tools_available: false,
+            runtime_full_access: Some(false),
         }),
     )
     .await?;
@@ -1782,6 +1787,7 @@ fn stale_startup_thread_started_removes_local_routing_state() -> Result<()> {
                     turns: Vec::new(),
                     blocks_direct_input: false,
                     task_tools_available: false,
+                    runtime_full_access: Some(false),
                 }),
             )
             .await?;

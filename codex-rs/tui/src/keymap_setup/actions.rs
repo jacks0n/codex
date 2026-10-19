@@ -121,6 +121,7 @@ define_keymap_actions! {
         copy => "Copy the last agent response to the clipboard.",
         clear_terminal => "Clear the terminal UI.",
         toggle_vim_mode => "Turn Vim composer mode on or off.",
+        toggle_yolo_mode => "Toggle runtime Full Access for the live agent tree.",
         toggle_fast_mode [FastMode] => "Turn Fast mode on or off.",
         toggle_raw_output => "Toggle raw scrollback mode.",
         toggle_side_conversation => "Switch between a side conversation and its parent.",

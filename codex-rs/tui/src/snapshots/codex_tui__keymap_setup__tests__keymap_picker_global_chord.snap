@@ -5,7 +5,7 @@ expression: "render_picker(params, 120)"
 
   Keymap
   All configurable shortcuts.
-  153 actions, 1 customized, 7 unbound.
+  154 actions, 1 customized, 7 unbound.
 
    All   Common   Customized (1)   Unbound (7)   App   Composer   Editor   Vim   Navigation   Agents   Approval      ›
 
@@ -19,6 +19,7 @@ expression: "render_picker(params, 120)"
   Global         Copy                       ctrl-o
   Global         Clear Terminal             ctrl-l
   Global       - Toggle Vim Mode            unbound
+  Global         Toggle Yolo Mode           alt-y
   Global         Toggle Raw Output          alt-r
   Global         Toggle Side Conversation   ctrl-/
   Global       - Leader                     unbound

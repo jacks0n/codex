@@ -63,6 +63,7 @@ impl StatusLineAccent {
             }
             StatusLineItem::Permissions => Self::Mode,
             StatusLineItem::ApprovalMode => Self::Mode,
+            StatusLineItem::YoloMode => Self::Mode,
             StatusLineItem::ThreadName
             | StatusLineItem::ThreadTitle
             | StatusLineItem::WorkspaceHeadline => Self::Thread,
