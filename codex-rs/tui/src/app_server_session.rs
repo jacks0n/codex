@@ -87,6 +87,8 @@ use codex_app_server_protocol::ThreadDeleteParams;
 use codex_app_server_protocol::ThreadDeleteResponse;
 use codex_app_server_protocol::ThreadForkParams;
 use codex_app_server_protocol::ThreadForkResponse;
+use codex_app_server_protocol::ThreadFullAccessUpdateParams;
+use codex_app_server_protocol::ThreadFullAccessUpdateResponse;
 use codex_app_server_protocol::ThreadGoalClearParams;
 use codex_app_server_protocol::ThreadGoalClearResponse;
 use codex_app_server_protocol::ThreadGoalGetParams;
@@ -169,6 +171,7 @@ const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 const JSONRPC_INVALID_PARAMS: i64 = -32602;
 pub(crate) const EXTERNAL_AGENT_CONFIG_IMPORT_IN_PROGRESS_MESSAGE: &str = "A previous external agent import is still running. Wait for it to finish before importing again.";
 const THREAD_SETTINGS_UPDATE_METHOD: &str = "thread/settings/update";
+const THREAD_FULL_ACCESS_UPDATE_METHOD: &str = "thread/fullAccess/update";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ForkGoalContinuation {
@@ -293,10 +296,9 @@ pub(crate) async fn request_thread_start_with_history_fallback(
     }
 }
 
-fn is_thread_settings_update_unsupported(source: &JSONRPCErrorError) -> bool {
+fn is_method_unsupported(source: &JSONRPCErrorError, method: &str) -> bool {
     source.code == JSONRPC_METHOD_NOT_FOUND
-        || (source.code == JSONRPC_INVALID_REQUEST
-            && source.message.contains(THREAD_SETTINGS_UPDATE_METHOD))
+        || (source.code == JSONRPC_INVALID_REQUEST && source.message.contains(method))
 }
 
 /// Data collected during the TUI bootstrap phase that the main event loop
@@ -336,6 +338,7 @@ pub(crate) struct AppServerSession {
     pub(crate) model_provider_override: Option<String>,
     history_support: ThreadHistorySupport,
     pub(crate) thread_settings_update_supported: bool,
+    full_access_update_supported: bool,
     default_model: Option<String>,
     available_models: Vec<ModelPreset>,
     daybreak_api_key_compat: Arc<tokio::sync::Semaphore>,
@@ -380,6 +383,8 @@ pub(crate) struct AppServerStartedThread {
     pub(crate) turns: Vec<Turn>,
     pub(crate) blocks_direct_input: bool,
     pub(crate) task_tools_available: bool,
+    /// None when a history-only read did not observe runtime state.
+    pub(crate) runtime_full_access: Option<bool>,
 }
 
 pub(crate) fn is_active_writer_error(err: &color_eyre::eyre::Report) -> bool {
@@ -459,6 +464,7 @@ impl AppServerSession {
             model_provider_override: None,
             history_support: ThreadHistorySupport::Paginated,
             thread_settings_update_supported: true,
+            full_access_update_supported: true,
             default_model: None,
             available_models: Vec::new(),
             daybreak_api_key_compat: Arc::new(tokio::sync::Semaphore::new(/*permits*/ 1)),
@@ -1411,7 +1417,7 @@ impl AppServerSession {
         {
             Ok(_) => Ok(true),
             Err(TypedRequestError::Server { source, .. })
-                if is_thread_settings_update_unsupported(&source) =>
+                if is_method_unsupported(&source, THREAD_SETTINGS_UPDATE_METHOD) =>
             {
                 // Older remote app servers can reject this experimental method as
                 // method-not-found, experimental-capability-gated, or an unknown
@@ -1422,6 +1428,39 @@ impl AppServerSession {
                 Ok(false)
             }
             Err(err) => Err(err).wrap_err("thread/settings/update failed in TUI"),
+        }
+    }
+
+    pub(crate) async fn thread_full_access_update(
+        &mut self,
+        thread_id: ThreadId,
+        enabled: bool,
+    ) -> Result<Option<bool>> {
+        if !self.full_access_update_supported {
+            return Ok(None);
+        }
+        let request_id = self.next_request_id();
+        match self
+            .client
+            .request_typed::<ThreadFullAccessUpdateResponse>(
+                ClientRequest::ThreadFullAccessUpdate {
+                    request_id,
+                    params: ThreadFullAccessUpdateParams {
+                        thread_id: thread_id.to_string(),
+                        enabled,
+                    },
+                },
+            )
+            .await
+        {
+            Ok(response) => Ok(Some(response.enabled)),
+            Err(TypedRequestError::Server { source, .. })
+                if is_method_unsupported(&source, THREAD_FULL_ACCESS_UPDATE_METHOD) =>
+            {
+                self.full_access_update_supported = false;
+                Ok(None)
+            }
+            Err(err) => Err(err).wrap_err("thread/fullAccess/update failed in TUI"),
         }
     }
 
@@ -2362,27 +2401,24 @@ async fn started_thread_from_start_response(
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        runtime_full_access: Some(false),
     })
 }
 
 async fn started_thread_from_resume_response(
     response: ThreadResumeResponse,
     local_settings: &LocalSettings,
-    thread_params_mode: ThreadParamsMode,
 ) -> Result<AppServerStartedThread> {
     let blocks_direct_input = thread_blocks_direct_input(&response.thread);
-    let session = thread_session_state_from_thread_resume_response(
-        &response,
-        local_settings,
-        thread_params_mode,
-    )
-    .await
-    .map_err(color_eyre::eyre::Report::msg)?;
+    let session = thread_session_state_from_thread_resume_response(&response, local_settings)
+        .await
+        .map_err(color_eyre::eyre::Report::msg)?;
     Ok(AppServerStartedThread {
         session,
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        runtime_full_access: Some(response.full_access),
     })
 }
 
@@ -2406,6 +2442,7 @@ async fn started_thread_from_fork_response(
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        runtime_full_access: Some(false),
     })
 }
 
@@ -2448,10 +2485,9 @@ async fn thread_session_state_from_thread_start_response(
     Ok(session)
 }
 
-async fn thread_session_state_from_thread_resume_response(
+pub(crate) async fn thread_session_state_from_thread_resume_response(
     response: &ThreadResumeResponse,
     local_settings: &LocalSettings,
-    _thread_params_mode: ThreadParamsMode,
 ) -> Result<ThreadSessionState, String> {
     // The server owns restored rules. This legacy projection is for display only;
     // normal turns do not send it back as an execution override.
@@ -2955,7 +2991,7 @@ mod tests {
                 message: message.to_string(),
             };
             assert_eq!(
-                is_thread_settings_update_unsupported(&source),
+                is_method_unsupported(&source, THREAD_SETTINGS_UPDATE_METHOD),
                 expected,
                 "{message}"
             );
@@ -4248,6 +4284,7 @@ mod tests {
                     duration_ms: None,
                 }],
             },
+            full_access: true,
             model: "gpt-5.5".to_string(),
             model_provider: "openai".to_string(),
             service_tier: None,
@@ -4281,13 +4318,11 @@ mod tests {
             items_backwards_cursor: None,
         };
 
-        let started = started_thread_from_resume_response(
-            response.clone(),
-            &LocalSettings::from(&config),
-            ThreadParamsMode::Remote,
-        )
-        .await
-        .expect("resume response should map");
+        let started =
+            started_thread_from_resume_response(response.clone(), &LocalSettings::from(&config))
+                .await
+                .expect("resume response should map");
+        assert_eq!(started.runtime_full_access, Some(true));
         assert_eq!(started.session.forked_from_id, Some(forked_from_id));
         assert_eq!(
             started.session.runtime_workspace_roots,
@@ -4338,7 +4373,6 @@ mod tests {
         let started = started_thread_from_resume_response(
             response.clone(),
             &LocalSettings::from(&embedded_config),
-            ThreadParamsMode::Embedded,
         )
         .await
         .expect("embedded resume response should map");
@@ -4349,7 +4383,6 @@ mod tests {
         let started = started_thread_from_resume_response(
             empty_roots_response,
             &LocalSettings::from(&config),
-            ThreadParamsMode::Remote,
         )
         .await
         .expect("resume response should map");

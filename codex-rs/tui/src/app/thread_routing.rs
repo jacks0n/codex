@@ -1061,6 +1061,9 @@ impl App {
                 });
             }
         }
+        if let ServerNotification::ThreadFullAccessUpdated(notification) = &notification {
+            self.observe_full_access(thread_id, notification.enabled);
+        }
         let inferred_session = if let ServerNotification::ThreadStarted(started) = &notification
             && self.primary_session_configured.is_some()
         {
@@ -1160,6 +1163,7 @@ impl App {
                 // after a no-op re-selection that needed no pending request.
                 self.adopt_server_permissions();
             }
+            self.refresh_yolo_status();
             notification = None;
         }
         if confirmed_profile.is_some() {
@@ -1436,6 +1440,7 @@ impl App {
                 self.chat_widget.handle_thread_session(session);
             }
         }
+        self.refresh_yolo_status();
         let should_buffer_initial_replay = !turns.is_empty();
         let replayed_final_items = realtime_delivery::completed_agent_items_from_turns(&turns);
         let replayed_voice_texts = realtime_delivery::replayed_voice_texts_from_turns(&turns);
@@ -1576,6 +1581,7 @@ impl App {
         if started.blocks_direct_input {
             self.agent_navigation.mark_parent_owned(thread_id);
         }
+        self.observe_started_thread_full_access(&started);
         let AppServerStartedThread { session, turns, .. } = started;
         if let Some(channel) = self.thread_event_channels.get(&thread_id) {
             let mut store = channel.store.lock().await;
@@ -1914,6 +1920,7 @@ impl App {
                 if matches!(
                     notification.as_ref(),
                     ServerNotification::TurnStarted(_)
+                        | ServerNotification::ThreadSettingsUpdated(_)
                         | ServerNotification::ThreadTokenUsageUpdated(_)
                 )
         );

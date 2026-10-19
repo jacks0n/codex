@@ -354,6 +354,7 @@ impl App {
         session.worktree_source_config_builder = app_server.worktree_source_config_builder.clone();
         session.inherit_task_tool_capabilities(app_server);
         *app_server = session;
+        self.yolo_mode = Default::default();
         #[cfg(any(target_os = "windows", test))]
         let interrupted_windows_setup = self.windows_sandbox.pending_setup.take().is_some();
         #[cfg(any(target_os = "windows", test))]
@@ -467,6 +468,7 @@ impl App {
         }
         if let Some(mut started) = thread {
             let id = started.session.thread_id;
+            self.observe_started_thread_full_access(&started);
             if pending_displayed_profile.is_none()
                 && let Some(channel) = self.thread_event_channels.get(&id)
                 && let Some(cached) = channel.store.lock().await.session.as_ref()

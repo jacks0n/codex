@@ -50,6 +50,14 @@ impl ChatWidget {
             }
         }
     }
+    pub(crate) fn set_yolo_status(&mut self, status: Option<String>) {
+        if self.yolo_status == status {
+            return;
+        }
+        self.yolo_status = status;
+        self.refresh_status_surfaces();
+    }
+
     /// Set the approval policy in the widget's config copy.
     pub(crate) fn set_approval_policy(&mut self, policy: AskForApproval) {
         if let Err(err) = self

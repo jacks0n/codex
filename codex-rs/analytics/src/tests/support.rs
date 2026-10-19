@@ -219,6 +219,7 @@ pub(super) fn sample_thread_resume_response_with_source(
             thread_source,
             parent_thread_id,
         ),
+        full_access: false,
         model: model.to_string(),
         model_provider: "openai".to_string(),
         service_tier: None,
