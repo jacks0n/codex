@@ -428,12 +428,7 @@ impl ConfigManager {
                 config,
                 used_defaults: false,
             }),
-            Err(error)
-                if self.strict_config
-                    || crate::is_unsupported_untrusted_approval_policy_error(&error) =>
-            {
-                Err(error)
-            }
+            Err(error) if self.strict_config => Err(error),
             Err(error) => {
                 warn!(%error, "configuration is unavailable; using default settings");
                 Ok(StartupConfig {
