@@ -1,6 +1,7 @@
 //! Request-scoped settings and capabilities, with live grants bound to the originating turn.
 
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use crate::agents_md::LoadedAgentsMd;
 use crate::config::TokenBudgetConfig;
@@ -20,6 +21,7 @@ use codex_model_provider_info::GCP_PROVIDER_ID;
 use codex_otel::SessionTelemetry;
 use codex_plugin::ExecutorPluginHookSource;
 use codex_protocol::items::ModelInvocationContext;
+use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::TurnContextItem;
 use tokio_util::sync::CancellationToken;
 
@@ -113,5 +115,18 @@ impl StepContext {
                 .effective_reasoning_effort()
                 .map(|effort| effort.to_string()),
         }
+    }
+
+    pub(crate) fn approval_policy(&self) -> AskForApproval {
+        self.turn
+            .effective_approval_policy(self.settings.approval_policy())
+    }
+
+    pub(crate) fn with_runtime_permissions(&self) -> Self {
+        let mut context = self.clone();
+        if self.turn.runtime_full_access.load(Ordering::Acquire) {
+            context.environments = context.environments.with_full_access();
+        }
+        context
     }
 }

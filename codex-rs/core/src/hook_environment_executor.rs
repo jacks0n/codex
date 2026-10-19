@@ -100,7 +100,7 @@ impl EnvironmentCommandExecutor {
             &self.session,
             &self.turn,
             Some(environment),
-            self.turn.network.clone(),
+            self.turn.network_for_environment(environment).cloned(),
             &environment.selection.environment_id,
             environment.permission_profile(),
             environment.config().network_policy.as_ref(),

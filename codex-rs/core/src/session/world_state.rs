@@ -269,11 +269,12 @@ impl Session {
         let approval_context =
             ApprovalPromptContext::new(settings.approvals_reviewer(), model_messages);
         if turn_context.config.include_permissions_instructions {
+            let runtime_step = step_context.with_runtime_permissions();
             let per_environment = turn_context
                 .config
                 .features
                 .enabled(Feature::PerEnvironmentContext);
-            let mut environments = step_context
+            let mut environments = runtime_step
                 .environments
                 .turn_environments()
                 .map(Some)
@@ -297,7 +298,7 @@ impl Session {
                     .as_ref()
                     .map(FileSystemSandboxContext::policy_context);
                 let permission_profile = environment.map_or_else(
-                    || turn_context.permission_profile_for_environments(&step_context.environments),
+                    || turn_context.permission_profile_for_environments(&runtime_step.environments),
                     super::turn_context::TurnEnvironment::permission_profile_with_workspace_roots,
                 );
                 #[allow(deprecated)]
@@ -313,7 +314,7 @@ impl Session {
                     id,
                     PermissionDescription::new(
                         &permission_profile,
-                        settings.approval_policy(),
+                        step_context.approval_policy(),
                         approval_context,
                         exec_policy.as_ref(),
                         &cwd,

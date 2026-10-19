@@ -20,7 +20,7 @@ pub(crate) fn patch_approval_requirement(
 ) -> Result<ExecApprovalRequirement, FunctionCallError> {
     match assess_patch_safety(
         action,
-        step_context.settings.approval_policy(),
+        step_context.approval_policy(),
         turn_environment.permission_profile(),
         matching,
     )
