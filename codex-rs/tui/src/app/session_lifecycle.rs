@@ -462,6 +462,7 @@ impl App {
                 if started.blocks_direct_input {
                     self.agent_navigation.mark_parent_owned(thread_id);
                 }
+                self.observe_started_thread_full_access(&started);
                 (started.session, started.turns, true)
             }
             PreparedAttachment::ReplayOnly(thread) => {
@@ -1185,6 +1186,7 @@ impl App {
             .set_queue_submissions_until_session_configured(/*queue*/ false);
         match result {
             Ok(started) => {
+                self.observe_started_thread_full_access(&started);
                 self.chat_widget.mark_fresh_task_for_sparkle(&started);
                 let thread_id = started.session.thread_id;
                 if started.task_tools_available {
@@ -1762,6 +1764,7 @@ impl App {
         if started.blocks_direct_input {
             self.mark_primary_thread_parent_owned(started.session.thread_id);
         }
+        self.observe_started_thread_full_access(&started);
         self.enqueue_primary_thread_session_with_presentation(
             started.session,
             started.turns,

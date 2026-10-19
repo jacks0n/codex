@@ -1017,6 +1017,8 @@ See the Codex keymap documentation for supported actions and examples."
 
         let agents_overview =
             agents_overview::AgentsOverviewState::new(local_settings.tui.agents_overview_grouping);
+        let yolo_mode = YoloMode::default();
+
         let mut app = Self {
             statusline_picker: None,
             statusline_metrics,
@@ -1133,6 +1135,7 @@ See the Codex keymap documentation for supported actions and examples."
             primary_session_configured: None,
             pending_primary_events: VecDeque::new(),
             pending_app_server_requests: PendingAppServerRequests::default(),
+            yolo_mode,
             dynamic_tool_status_updates,
             dynamic_tool_tasks: HashMap::new(),
             pending_startup_thread_start,
@@ -1193,6 +1196,7 @@ See the Codex keymap documentation for supported actions and examples."
         for session in &other_backends {
             app.backend_registry.connect(session);
         }
+        app.refresh_yolo_status();
         if start_in_agents_overview {
             app.open_agents_overview(&app_server);
         } else {
@@ -1205,6 +1209,7 @@ See the Codex keymap documentation for supported actions and examples."
         let initial_session_started_at = Instant::now();
         if let Some(started) = initial_started_thread {
             let thread_id = started.session.thread_id;
+            app.observe_started_thread_full_access(&started);
             app.chat_widget
                 .set_task_mentions_enabled(started.task_tools_available);
             if started.blocks_direct_input {

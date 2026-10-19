@@ -328,6 +328,7 @@ async fn prepared_resume_cannot_activate_through_another_backend() -> Result<()>
             turns: Vec::new(),
             blocks_direct_input: false,
             task_tools_available: true,
+            runtime_full_access: Some(false),
         },
         restored_blank_session: false,
         read_only: false,
