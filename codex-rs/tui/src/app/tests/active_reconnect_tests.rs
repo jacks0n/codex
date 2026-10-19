@@ -46,6 +46,10 @@ async fn reconnect_restores_history_permissions_and_resumes_unsent_input() -> Re
         app.local_settings.tui.keymap.chat.edit_queued_message =
             Some(KeybindingsSpec::One(KeybindingSpec("alt-up".into())));
         let id = ThreadId::new();
+        let runtime_full_access = recovered_queue;
+        app.observe_full_access(id, !runtime_full_access);
+        let background = ThreadId::new();
+        app.observe_full_access(background, /*enabled*/ true);
         let cwd = app.config.cwd.clone();
         app.config.model = Some("gpt-test".into());
         // Avoid platform-specific path widths in the mode-preservation snapshot.
@@ -149,7 +153,8 @@ async fn reconnect_restores_history_permissions_and_resumes_unsent_input() -> Re
                         assert_eq!(params["threadId"], id.to_string());
                         assert!(params["model"].is_null());
                         let mut result = json!({"thread": thread, "model": "gpt-test", "modelProvider": "test-provider", "cwd": cwd,
-                            "approvalPolicy": "never", "approvalsReviewer": "user", "sandbox": {"type": "dangerFullAccess"}, "reasoningEffort": null});
+                            "approvalPolicy": "never", "approvalsReviewer": "user", "sandbox": {"type": "dangerFullAccess"}, "reasoningEffort": null,
+                            "fullAccess": runtime_full_access});
                         if let Some(mode) = &server_mode {
                             result["collaborationMode"] = json!(mode);
                         }
@@ -312,6 +317,22 @@ async fn reconnect_restores_history_permissions_and_resumes_unsent_input() -> Re
         );
         app.finish_reconnect(&mut tui, &mut session, &mut events, connected, "2.1.0")
             .await?;
+        app.chat_widget.setup_status_line(
+            vec![crate::bottom_pane::StatusLineItem::YoloMode],
+            /*use_theme_colors*/ true,
+        );
+        assert_eq!(
+            app.chat_widget.status_line_text().unwrap_or_default(),
+            if runtime_full_access || pending_profile {
+                "YOLO"
+            } else {
+                ""
+            }
+        );
+        app.chat_widget.setup_status_line(
+            vec![crate::bottom_pane::StatusLineItem::ModelWithReasoning],
+            /*use_theme_colors*/ true,
+        );
         if edit_offline {
             assert!(!app.chat_widget.has_active_view());
             assert!(
@@ -477,6 +498,21 @@ async fn reconnect_restores_history_permissions_and_resumes_unsent_input() -> Re
                 .count(),
             usize::from(!edit_offline)
         );
+        let mut background_history = ThreadEventStore::new(THREAD_EVENT_CHANNEL_CAPACITY);
+        background_history.set_session(
+            test_thread_session(background, app.config.cwd.to_path_buf()),
+            Vec::new(),
+        );
+        app.active_thread_id = Some(background);
+        app.replay_thread_snapshot(
+            background_history.snapshot(),
+            /*resume_restored_queue*/ false,
+        );
+        app.chat_widget.setup_status_line(
+            vec![crate::bottom_pane::StatusLineItem::YoloMode],
+            /*use_theme_colors*/ true,
+        );
+        assert_eq!(app.chat_widget.status_line_text().unwrap_or_default(), "");
     }
     Ok(())
 }

@@ -6,11 +6,23 @@ use pretty_assertions::assert_eq;
 #[tokio::test]
 async fn builtin_permission_selection_adopts_server_settings() -> Result<()> {
     let (mut app, mut events, _ops) = make_test_app_with_channels().await;
+    app.config
+        .permissions
+        .approval_policy
+        .set(codex_protocol::protocol::AskForApproval::Never)?;
+    app.config
+        .permissions
+        .set_permission_profile(PermissionProfile::Disabled)?;
     let mut server = start_config_write_test_app_server(&app).await?;
     let started = server.start_thread(&app.config).await?;
     let thread_id = started.session.thread_id;
     app.enqueue_primary_thread_session(started.session, started.turns)
         .await?;
+    app.chat_widget.setup_status_line(
+        vec![crate::bottom_pane::StatusLineItem::YoloMode],
+        /*use_theme_colors*/ true,
+    );
+    insta::assert_snapshot!(app.chat_widget.status_line_text().unwrap_or_default(), @"YOLO");
     // A previously selected custom profile may have left a profile-specific proxy cached.
     let home = tempdir()?;
     std::fs::write(
@@ -92,6 +104,7 @@ proxy_url = "http://127.0.0.1:43128"
     );
     assert_eq!(app.chat_widget.config_ref().permissions.network, None);
     assert_eq!(app.config.permissions.network, None);
+    insta::assert_snapshot!(app.chat_widget.status_line_text().unwrap_or_default(), @"");
     assert_eq!(
         app.runtime_permission_profile_override,
         Some(RuntimePermissionProfileOverride::from_config(&app.config))
