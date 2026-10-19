@@ -81,7 +81,7 @@ impl PreparedExecCommand {
             .create_exec_approval_requirement_for_shell(
                 ExecApprovalRequest {
                     command: &self.resolved.command,
-                    approval_policy: step.settings.approval_policy(),
+                    approval_policy: step.approval_policy(),
                     permission_profile: environment.permission_profile().clone(),
                     environment_policy: environment.config().exec_policy.as_ref(),
                     windows_sandbox_level: windows_sandbox_level_for_legacy_checks(
@@ -154,7 +154,9 @@ impl<'a> ParsedExecCommand<'a> {
                     turn_environment.config().windows_sandbox_type,
                     turn_environment.config().windows_sandbox_level,
                 ),
-                step.turn.network.is_some(),
+                step.turn
+                    .network_for_environment(turn_environment)
+                    .is_some(),
             ) != SandboxType::None;
         // `to_abs_path()` alone cannot identify foreign drive paths: `file:///C:/repo` is
         // representable as `/C:/repo` on POSIX. Require the inferred convention to match too.
@@ -271,7 +273,7 @@ impl<'a> ParsedExecCommand<'a> {
 
         // Sticky turn permissions have already been approved, so they should
         // continue through the normal exec approval flow for the command.
-        let approval_policy = step.settings.approval_policy();
+        let approval_policy = step.approval_policy();
         if permissions.sandbox_permissions.requests_sandbox_override()
             && !permissions.permissions_preapproved
             && prompt_is_rejected_by_policy(approval_policy, /*prompt_is_rule*/ false).is_some()

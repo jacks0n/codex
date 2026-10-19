@@ -95,7 +95,8 @@ impl McpServerSource {
         }
     }
 
-    pub(crate) fn is_host_owned_apps(&self, name: &str, config: &McpServerConfig) -> bool {
+    /// Whether this registration identifies the controller-owned Apps server.
+    pub fn is_host_owned_apps(&self, name: &str, config: &McpServerConfig) -> bool {
         name == CODEX_APPS_MCP_SERVER_NAME
             && config.is_local_environment()
             && matches!(

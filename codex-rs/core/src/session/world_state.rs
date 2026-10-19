@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use super::session::Session;
 use super::step_context::StepContext;
@@ -238,7 +239,14 @@ impl Session {
         let approval_context =
             ApprovalPromptContext::new(settings.approvals_reviewer(), model_messages);
         if turn_context.config.include_permissions_instructions {
-            let environment = step_context.environments.primary();
+            let runtime_environments = turn_context
+                .runtime_full_access
+                .load(Ordering::Acquire)
+                .then(|| step_context.environments.clone().with_full_access());
+            let environments = runtime_environments
+                .as_ref()
+                .unwrap_or(&step_context.environments);
+            let environment = environments.primary();
             let sandbox = environment
                 .filter(|environment| environment.environment.is_remote())
                 .map(|environment| {
@@ -247,15 +255,14 @@ impl Session {
             let paths = sandbox
                 .as_ref()
                 .map(FileSystemSandboxContext::policy_context);
-            let permission_profile =
-                turn_context.permission_profile_for_environments(&step_context.environments);
+            let permission_profile = turn_context.permission_profile_for_environments(environments);
             #[allow(deprecated)]
             let cwd = environment
                 .and_then(|environment| environment.cwd().to_abs_path().ok())
                 .unwrap_or_else(|| turn_context.cwd.clone());
             world_state.add_section(PermissionsState::new(
                 &permission_profile,
-                settings.approval_policy(),
+                step_context.approval_policy(),
                 approval_context,
                 exec_policy.as_ref(),
                 &cwd,

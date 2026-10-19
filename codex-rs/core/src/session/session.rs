@@ -724,7 +724,7 @@ impl Session {
             window_id,
             request_kind,
         );
-        ExecutionMetadata::from_settings(&step_context.settings).apply_to(&mut responses_metadata);
+        ExecutionMetadata::from_step_context(step_context).apply_to(&mut responses_metadata);
         responses_metadata.guardian_recorded_items = self.parent_observer_event_tx.get().is_some();
         if responses_metadata.subagent_header.as_deref()
             == Some(crate::guardian::GUARDIAN_REVIEWER_NAME)
