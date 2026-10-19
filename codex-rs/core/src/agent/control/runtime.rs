@@ -25,6 +25,7 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::PoisonError;
 use std::sync::Weak;
+use std::sync::atomic::AtomicBool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tokio_util::task::task_tracker::TaskTrackerToken;
@@ -191,6 +192,8 @@ pub(crate) struct LocalAgentRuntime {
     pub(super) agent_execution_limiter: Arc<AgentExecutionLimiter>,
     /// Session-scoped state shared by the root thread and every cloned sub-agent control handle.
     pub(super) rollout_budget: Arc<RolloutBudget>,
+    /// Runtime-only Full Access override shared by the root and all descendants.
+    full_access: Arc<AtomicBool>,
     /// The user-selected root routing tier, shared by the entire agent tree.
     pub(super) root_service_tier: Arc<ArcSwapOption<String>>,
     /// Retains the root's opt-in instruction provider even when the root is unloaded.
@@ -220,6 +223,7 @@ impl LocalAgentRuntime {
             shutdown_state: Arc::default(),
             agent_execution_limiter: Arc::default(),
             rollout_budget: Arc::default(),
+            full_access: Arc::default(),
             root_service_tier: Arc::new(ArcSwapOption::from(None)),
             shared_thread_instructions_provider: Arc::default(),
         };
@@ -309,6 +313,10 @@ impl LocalAgentRuntime {
 
     pub(crate) fn generate_thread_id(&self) -> ThreadId {
         (self.thread_id_generator)()
+    }
+
+    pub(crate) fn runtime_full_access(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.full_access)
     }
 
     pub(crate) fn root_thread_instructions_provider(

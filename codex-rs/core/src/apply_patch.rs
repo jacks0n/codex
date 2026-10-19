@@ -27,7 +27,7 @@ pub(crate) fn prepare_apply_patch(
 ) -> Result<ApplyPatchRuntimeInvocation, FunctionCallError> {
     match assess_patch_safety(
         &action,
-        step_context.settings.approval_policy(),
+        step_context.approval_policy(),
         turn_environment.permission_profile(),
         matching,
     )

@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::PoisonError;
 
+use crate::config::PermissionProfileSnapshot;
 use async_channel::Sender;
 use codex_exec_server::Environment;
 use codex_exec_server::EnvironmentConnectionState;
@@ -978,6 +979,19 @@ pub(crate) enum TurnEnvironmentState {
 }
 
 impl TurnEnvironmentState {
+    fn config_origin(&self) -> EnvironmentConfigOrigin {
+        match self {
+            Self::Ready(environment) => environment.config_origin,
+            Self::Starting(environment) => environment.config_origin,
+            Self::Failed { selection, .. }
+                if matches!(selection.config, EnvironmentConfigState::FromThread) =>
+            {
+                EnvironmentConfigOrigin::Thread
+            }
+            Self::Failed { .. } => EnvironmentConfigOrigin::Owner,
+        }
+    }
+
     fn from_resolution(
         starting: StartingTurnEnvironment,
         resolved: Option<TurnEnvironmentResult>,
@@ -1060,6 +1074,26 @@ impl TurnEnvironmentSnapshot {
             };
             &selection.selected_capability_roots
         }))
+    }
+
+    /// Applies a runtime Full Access profile to thread-owned ready environments.
+    pub(crate) fn with_full_access(mut self) -> Self {
+        for environment in &mut self.environments {
+            if let TurnEnvironmentState::Ready(environment) = environment
+                && environment.config_origin == EnvironmentConfigOrigin::Thread
+            {
+                let EnvironmentConfigState::Ready(config) = &mut environment.selection.config
+                else {
+                    unreachable!("ready turn environments always carry resolved configuration")
+                };
+                config.permission_profile = PermissionProfileSnapshot::legacy(
+                    crate::runtime_permissions::full_access_profile(
+                        config.permission_profile.permission_profile(),
+                    ),
+                );
+            }
+        }
+        self
     }
 
     pub(crate) fn has_full_access(
@@ -1169,6 +1203,23 @@ impl TurnEnvironmentSnapshot {
             None => return &[],
         };
         &selection.workspace_roots
+    }
+
+    pub(crate) fn primary_config_origin(&self) -> Option<EnvironmentConfigOrigin> {
+        self.environments
+            .first()
+            .map(TurnEnvironmentState::config_origin)
+    }
+
+    pub(crate) fn config_origin(&self, environment_id: &str) -> Option<EnvironmentConfigOrigin> {
+        self.environments.iter().find_map(|environment| {
+            let selection = match environment {
+                TurnEnvironmentState::Ready(environment) => &environment.selection,
+                TurnEnvironmentState::Starting(environment) => &environment.selection,
+                TurnEnvironmentState::Failed { selection, .. } => selection,
+            };
+            (selection.environment_id == environment_id).then(|| environment.config_origin())
+        })
     }
 
     /// Returns the primary environment's resolved permissions, or the provided fallback.

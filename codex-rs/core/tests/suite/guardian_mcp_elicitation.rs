@@ -11,6 +11,7 @@ use codex_extension_api::McpServerContributor;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::items::McpToolCallStatus;
 use codex_protocol::items::TurnItem;
+use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::AutoReviewMessages;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
@@ -223,16 +224,18 @@ async fn interrupt_aborts_server_initiated_mcp_guardian_review() -> Result<()> {
     Ok(())
 }
 
-#[test_case(None, false; "ordinary_absent")]
-#[test_case(Some(false), false; "ordinary_false")]
-#[test_case(Some(true), false; "ordinary_true")]
-#[test_case(None, true; "strict_absent")]
-#[test_case(Some(false), true; "strict_false")]
-#[test_case(Some(true), true; "strict_true")]
+#[test_case(None, false, false; "ordinary_absent")]
+#[test_case(Some(false), false, false; "ordinary_false")]
+#[test_case(Some(true), false, false; "ordinary_true")]
+#[test_case(None, true, false; "strict_absent")]
+#[test_case(Some(false), true, false; "strict_false")]
+#[test_case(Some(true), true, false; "strict_true")]
+#[test_case(Some(true), true, true; "strict_runtime_full_access")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn server_initiated_mcp_elicitation_can_require_synchronous_auto_review(
     sensitive_action: Option<bool>,
     strict_auto_review: bool,
+    runtime_full_access: bool,
 ) -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_wine_exec!(Ok(()), "the MCP fixture requires a host Python interpreter");
@@ -290,6 +293,10 @@ async fn server_initiated_mcp_elicitation_can_require_synchronous_auto_review(
         })
         .with_config(move |config| {
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
+            config
+                .permissions
+                .set_permission_profile(PermissionProfile::read_only())
+                .expect("set read-only permissions");
             config.approvals_reviewer = if strict_auto_review {
                 ApprovalsReviewer::User
             } else {
@@ -302,6 +309,14 @@ async fn server_initiated_mcp_elicitation_can_require_synchronous_auto_review(
         });
     let test = builder.build_with_auto_env(&server).await?;
     wait_for_mcp_server(&test.codex, "elicitation").await?;
+    if runtime_full_access {
+        test.thread_manager
+            .set_agent_tree_full_access(
+                test.codex.startup_metadata().thread_id,
+                /*enabled*/ true,
+            )
+            .await?;
+    }
     responses::mount_sse_once(
         &server,
         responses::sse(vec![
@@ -350,7 +365,7 @@ async fn server_initiated_mcp_elicitation_can_require_synchronous_auto_review(
             .as_str()
             .expect("MCP fixture should echo the wire response"),
     )?;
-    let requires_sync = sensitive_action == Some(true);
+    let requires_sync = sensitive_action == Some(true) && !runtime_full_access;
     let expected_response = if requires_sync {
         json!({
             "action": "decline",

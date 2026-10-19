@@ -200,7 +200,7 @@ pub(crate) async fn run_pre_tool_use_hooks(
         cwd: tool_hook_cwd(&step_context.environments, turn_context),
         transcript_path: sess.hook_transcript_path().await,
         model: step_context.settings.model_info.slug.clone(),
-        permission_mode: hook_permission_mode(step_context.settings.approval_policy()),
+        permission_mode: hook_permission_mode(step_context.approval_policy()),
         tool_name: tool_name.name().to_string(),
         matcher_aliases: tool_name.matcher_aliases().to_vec(),
         tool_use_id,
@@ -311,7 +311,7 @@ pub(crate) async fn run_post_tool_use_hooks(
         cwd: tool_hook_cwd(&step_context.environments, turn_context),
         transcript_path: sess.hook_transcript_path().await,
         model: step_context.settings.model_info.slug.clone(),
-        permission_mode: hook_permission_mode(step_context.settings.approval_policy()),
+        permission_mode: hook_permission_mode(step_context.approval_policy()),
         tool_name,
         matcher_aliases,
         tool_use_id,
@@ -373,12 +373,13 @@ fn build_request_metadata(
     step_context: Option<&StepContext>,
     turn_context: &TurnContext,
 ) -> Map<String, Value> {
-    let settings = step_context
-        .map(|step_context| step_context.settings.as_ref())
-        .unwrap_or(turn_context.initial_settings.as_ref());
+    let execution_metadata = match step_context {
+        Some(step_context) => ExecutionMetadata::from_step_context(step_context),
+        None => ExecutionMetadata::from_settings(&turn_context.initial_settings),
+    };
     turn_context
         .turn_metadata_state
-        .current_meta_value_for_mcp_request(ExecutionMetadata::from_settings(settings))
+        .current_meta_value_for_mcp_request(execution_metadata)
         .map(|turn_metadata| {
             Map::from_iter([(
                 crate::X_CODEX_TURN_METADATA_HEADER.to_string(),

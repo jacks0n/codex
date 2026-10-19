@@ -58,6 +58,23 @@ pub struct ElicitationReviewRequest {
 }
 
 pub trait ElicitationReviewer: Send + Sync {
+    /// Resolves live authority before policy gates; the default retains the captured server policy.
+    fn effective_permissions(
+        &self,
+        config: Arc<McpConfig>,
+        request: ElicitationReviewRequest,
+    ) -> BoxFuture<'static, Option<(AskForApproval, codex_protocol::models::PermissionProfile)>>
+    {
+        Box::pin(async move {
+            Some((
+                config.approval_policy.value(),
+                config
+                    .permission_profile_for_server(&request.server_name)?
+                    .clone(),
+            ))
+        })
+    }
+
     fn review(
         &self,
         request: ElicitationReviewRequest,
@@ -514,9 +531,23 @@ impl ElicitationRequestManager {
                     lifecycle,
                     ..
                 } = &authority;
-                let approval_policy = config.approval_policy.value();
-                let Some(permission_profile) = config.permission_profile_for_server(&server_name)
-                else {
+                let permissions = if let Some(reviewer) = reviewer {
+                    reviewer
+                        .effective_permissions(
+                            Arc::clone(config),
+                            ElicitationReviewRequest {
+                                server_name: server_name.clone(),
+                                request_id: id.clone(),
+                                elicitation: elicitation.clone(),
+                            },
+                        )
+                        .await
+                } else {
+                    config
+                        .permission_profile_for_server(&server_name)
+                        .map(|profile| (config.approval_policy.value(), profile.clone()))
+                };
+                let Some((approval_policy, permission_profile)) = permissions else {
                     return Ok(ElicitationResponse {
                         action: ElicitationAction::Decline,
                         content: None,
@@ -576,7 +607,7 @@ impl ElicitationRequestManager {
 
                 let permission_prompt_is_auto_approved = mcp_permission_prompt_is_auto_approved(
                     approval_policy,
-                    permission_profile,
+                    &permission_profile,
                     McpPermissionPromptAutoApproveContext::default(),
                 );
                 if permission_prompt_is_auto_approved && can_auto_accept_elicitation(&elicitation) {

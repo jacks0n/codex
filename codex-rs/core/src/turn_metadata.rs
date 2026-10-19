@@ -13,6 +13,7 @@ use serde_json::Value;
 use tokio::sync::watch;
 use tokio_util::task::AbortOnDropHandle;
 
+use crate::environment_selection::EnvironmentConfigOrigin;
 use crate::responses_metadata::AGENT_NAME_KEY;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CodexResponsesRequestKind;
@@ -25,7 +26,10 @@ use crate::responses_metadata::subagent_header_value;
 use crate::responses_metadata::subagent_metadata_kind;
 use crate::sandbox_tags::SandboxTags;
 use crate::sandbox_tags::record_policy_metadata;
+use crate::session::step_context::StepContext;
 use crate::session::step_settings::ResolvedStepSettings;
+use crate::session::turn_context::TurnEnvironment;
+use crate::tools::sandboxing::configured_windows_sandbox_selection;
 use codex_file_system::WindowsSandboxSelection;
 use codex_git_utils::SanitizedGitUrl;
 use codex_git_utils::get_git_remote_urls_assume_git_repo;
@@ -36,10 +40,12 @@ use codex_protocol::ThreadId;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
+use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::ThreadSource;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_git_discovery::GitRootDiscovery;
+use codex_utils_path_uri::PathUri;
 
 // Memory requests await this optional metadata before sending their model request.
 const MEMORY_GIT_METADATA_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
@@ -56,6 +62,7 @@ fn is_targeted_continuation(value: &str) -> bool {
 
 /// Captured execution settings shared by Responses and MCP metadata.
 pub(crate) struct ExecutionMetadata<'a> {
+    pub(crate) sandbox_tags: Option<SandboxTags>,
     pub(crate) model: &'a str,
     pub(crate) reasoning_effort: Option<ReasoningEffortConfig>,
     pub(crate) node_repl_disabled: bool,
@@ -65,12 +72,62 @@ pub(crate) struct ExecutionMetadata<'a> {
 
 impl<'a> ExecutionMetadata<'a> {
     pub(crate) fn from_settings(settings: &'a ResolvedStepSettings) -> Self {
+        Self::from_settings_and_approval_policy(settings, settings.approval_policy())
+    }
+
+    pub(crate) fn from_step_context(step_context: &'a StepContext) -> Self {
+        let mut metadata = Self::from_settings_and_approval_policy(
+            &step_context.settings,
+            step_context.approval_policy(),
+        );
+        // Sandbox labels describe the primary environment's turn-level permissions.
+        let turn = &step_context.turn;
+        let environment = step_context.environments.primary();
+        let profile = environment.map_or_else(
+            || turn.permission_profile(),
+            |_| turn.permission_profile_for_environments(&step_context.environments),
+        );
+        #[allow(deprecated)]
+        let cwd = &turn.cwd;
+        let windows_sandbox_selection = environment.map_or_else(
+            || {
+                configured_windows_sandbox_selection(
+                    turn.config.effective_local_windows_sandbox_type(),
+                    turn.windows_sandbox_level,
+                    &PathUri::from_abs_path(cwd),
+                )
+            },
+            TurnEnvironment::windows_sandbox_selection_for_turn_metadata,
+        );
+        let enforce_managed_network = environment.map_or_else(
+            || {
+                turn.network.is_some()
+                    && (!turn.runtime_full_access.load(Ordering::Acquire)
+                        || turn.initial_environments.primary_config_origin()
+                            == Some(EnvironmentConfigOrigin::Owner))
+            },
+            |environment| turn.network_for_environment(environment).is_some(),
+        ) && !matches!(profile, PermissionProfile::Disabled);
+        metadata.sandbox_tags = Some(SandboxTags::new(
+            &profile,
+            cwd,
+            windows_sandbox_selection,
+            enforce_managed_network,
+        ));
+        metadata
+    }
+
+    fn from_settings_and_approval_policy(
+        settings: &'a ResolvedStepSettings,
+        approval_policy: AskForApproval,
+    ) -> Self {
         Self {
+            sandbox_tags: None,
             model: settings.model_info.slug.as_str(),
             reasoning_effort: settings.effective_reasoning_effort(),
             node_repl_disabled: settings.model_info.node_repl_disabled,
             auto_review_enabled: crate::guardian::routes_approval_policy_to_guardian(
-                settings.approval_policy(),
+                approval_policy,
                 settings.approvals_reviewer(),
             ),
             node_repl_auto_review_required: settings.model_info.computer_use_review_required(),
@@ -78,6 +135,9 @@ impl<'a> ExecutionMetadata<'a> {
     }
 
     pub(crate) fn apply_to(&self, metadata: &mut CodexResponsesMetadata) {
+        if let Some(tags) = self.sandbox_tags {
+            tags.record_metadata(metadata);
+        }
         metadata.auto_review_enabled = Some(self.auto_review_enabled);
         metadata.node_repl_auto_review_required = Some(self.node_repl_auto_review_required);
         metadata.node_repl_disabled = Some(self.node_repl_disabled);

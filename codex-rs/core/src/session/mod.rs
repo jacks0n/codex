@@ -3061,7 +3061,7 @@ impl Session {
         cancellation_token: CancellationToken,
     ) -> Option<RequestPermissionsResponse> {
         let turn_context = &step_context.turn;
-        let approval_policy = step_context.settings.approval_policy();
+        let approval_policy = step_context.approval_policy();
         let Some(environment) = step_context
             .environments
             .turn_environments()
@@ -4022,7 +4022,7 @@ impl Session {
             environments,
             selected_capability_roots,
             executor_capability_discovery,
-            extension_data,
+            extension_data: Arc::new(extension_data),
             mcp,
             tool_router,
             loaded_agents_md,
