@@ -3043,11 +3043,20 @@ async fn permission_request_hook_allows_exec_command_without_user_approval() -> 
     Ok(())
 }
 
-#[test_case::test_case("allow"; "allow")]
-#[test_case::test_case("deny"; "deny")]
-#[test_case::test_case("no_opinion"; "ask")]
+#[test_case::test_case("allow", "danger-full-access"; "unrestricted_allow")]
+#[test_case::test_case("deny", "danger-full-access"; "unrestricted_deny")]
+#[test_case::test_case("no_opinion", "danger-full-access"; "unrestricted_ask")]
+#[test_case::test_case("allow", "workspace-write"; "workspace_allow")]
+#[test_case::test_case("deny", "workspace-write"; "workspace_deny")]
+#[test_case::test_case("no_opinion", "workspace-write"; "workspace_ask")]
+#[test_case::test_case("allow", "read-only"; "read_only_allow")]
+#[test_case::test_case("deny", "read-only"; "read_only_deny")]
+#[test_case::test_case("no_opinion", "read-only"; "read_only_ask")]
 #[tokio::test]
-async fn explicit_untrusted_config_respects_permission_hook(mode: &'static str) -> Result<()> {
+async fn explicit_untrusted_config_respects_permission_hook(
+    mode: &'static str,
+    sandbox_mode: &'static str,
+) -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_wine_exec!(Ok(()), "exec_command is unavailable for Wine executors");
 
@@ -3087,12 +3096,14 @@ async fn explicit_untrusted_config_respects_permission_hook(mode: &'static str) 
             .expect("failed to write permission request hook test fixture");
             fs::write(
                 home.join("config.toml"),
-                r#"approval_policy = "untrusted"
-sandbox_mode = "danger-full-access"
+                format!(
+                    r#"approval_policy = "untrusted"
+sandbox_mode = "{sandbox_mode}"
 
 [features]
 hooks = true
-"#,
+"#
+                ),
             )
             .expect("failed to write untrusted approval config test fixture");
         })

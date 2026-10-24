@@ -10,7 +10,7 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 ---
 
 > [!CAUTION]
-> This downstream fork is based on `rust-v0.163.0` and additionally carries:
+> This downstream fork is based on `rust-v0.164.0` and additionally carries:
 >
 > - `approval_policy = "untrusted"` compatibility for
 >   [agentperm](https://github.com/jacks0n/agentperm), without restoring Codex's retired safe-command
@@ -19,7 +19,13 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 >   permission state when disabled.
 >
 > Agentperm installation alone does not select the compatibility policy; configure it explicitly in
-> `~/.codex/config.toml`. **OpenAI maintainers: do not merge this branch or its pull request upstream.**
+> `~/.codex/config.toml`. Approval routing supports read-only, workspace-write, and unrestricted
+> sandbox configurations, plus explicit exec-policy rules. PermissionRequest hooks can chain
+> agentperm with Beckon; no integration command or sandbox choice is hardcoded.
+>
+> Alt-Y enables the live, tree-wide YOLO override, bypassing ordinary approval hooks while active.
+> Disabling it restores the configured approval and sandbox behavior without persisting the override.
+> **OpenAI maintainers: do not merge this branch or its pull request upstream.**
 > These changes are intentionally maintained for this fork.
 
 ## Quickstart
