@@ -5351,6 +5351,14 @@ class ThreadExtra(BaseModel):
     )
 
 
+class ThreadFullAccessUpdatedNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    enabled: bool
+    thread_id: Annotated[str, Field(alias="threadId")]
+
+
 class ThreadGoalClearResponse(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -9556,6 +9564,24 @@ class ThreadProjectUpdatedServerNotification(BaseModel):
     params: ThreadProjectUpdatedNotification
 
 
+class ThreadFullAccessUpdatedServerNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    emitted_at_ms: Annotated[
+        int | None,
+        Field(
+            alias="emittedAtMs",
+            description="Unix timestamp (in milliseconds) when app-server emitted this notification.",
+        ),
+    ] = None
+    method: Annotated[
+        Literal["thread/fullAccess/updated"],
+        Field(title="Thread/fullAccess/updatedNotificationMethod"),
+    ]
+    params: ThreadFullAccessUpdatedNotification
+
+
 class HookStartedServerNotification(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -12622,6 +12648,13 @@ class ThreadResumeResponse(BaseModel):
             description="Saved list of disabled plugin IDs. Does not yet filter plugin capabilities.",
         ),
     ] = []
+    full_access: Annotated[
+        bool | None,
+        Field(
+            alias="fullAccess",
+            description="Whether the loaded thread's runtime Full Access override is enabled.",
+        ),
+    ] = False
     instruction_sources: Annotated[
         list[LegacyAppPathString] | None,
         Field(
@@ -13317,6 +13350,7 @@ class ServerNotification(
         | ThreadEnvironmentConnectedServerNotification
         | ThreadEnvironmentDisconnectedServerNotification
         | ThreadSettingsUpdatedServerNotification
+        | ThreadFullAccessUpdatedServerNotification
         | ThreadTokenUsageUpdatedServerNotification
         | TurnStartedServerNotification
         | HookStartedServerNotification
@@ -13408,6 +13442,7 @@ class ServerNotification(
         | ThreadEnvironmentConnectedServerNotification
         | ThreadEnvironmentDisconnectedServerNotification
         | ThreadSettingsUpdatedServerNotification
+        | ThreadFullAccessUpdatedServerNotification
         | ThreadTokenUsageUpdatedServerNotification
         | TurnStartedServerNotification
         | HookStartedServerNotification

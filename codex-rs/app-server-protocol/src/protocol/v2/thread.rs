@@ -332,6 +332,30 @@ pub struct ThreadSettingsUpdatedNotification {
     pub thread_settings: ThreadSettings,
 }
 
+/// Updates the runtime-only Full Access override for a thread and its agents.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadFullAccessUpdateParams {
+    pub thread_id: String,
+    pub enabled: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadFullAccessUpdateResponse {
+    pub enabled: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadFullAccessUpdatedNotification {
+    pub thread_id: String,
+    pub enabled: bool,
+}
+
 #[derive(
     Serialize, Deserialize, Debug, Default, Clone, PartialEq, JsonSchema, TS, ExperimentalApi,
 )]
@@ -435,6 +459,9 @@ pub struct ThreadResumeParams {
 #[ts(export_to = "v2/")]
 pub struct ThreadResumeResponse {
     pub thread: Thread,
+    /// Whether the loaded thread's runtime Full Access override is enabled.
+    #[serde(default)]
+    pub full_access: bool,
     pub model: String,
     pub model_provider: String,
     pub service_tier: Option<String>,

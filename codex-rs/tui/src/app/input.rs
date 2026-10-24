@@ -574,6 +574,13 @@ impl App {
         }
 
         let app_keymap_shortcuts_available = self.app_keymap_shortcuts_available();
+
+        if app_keymap_shortcuts_available && self.keymap.app.toggle_yolo_mode.is_pressed(key_event)
+        {
+            self.toggle_yolo_mode(app_server).await;
+            return;
+        }
+
         if app_keymap_shortcuts_available
             && self
                 .handle_shared_app_keymap_action(tui, app_server, key_event)
@@ -799,6 +806,7 @@ impl App {
     }
 
     pub(super) fn refresh_status_line(&mut self) {
+        self.refresh_yolo_status();
         self.chat_widget.refresh_status_line();
     }
 }

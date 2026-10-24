@@ -295,6 +295,215 @@ fn thread_id_generator_defaults_to_standard_ids() {
     );
 }
 
+#[test_case::test_case(true; "existing_child")]
+#[test_case::test_case(false; "future_child")]
+#[tokio::test]
+async fn full_access_override_is_shared_with_existing_and_future_subagents(
+    child_exists_before_enable: bool,
+) {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    let configured_approval = config.permissions.approval_policy.value();
+    let configured_profile = config.permissions.effective_permission_profile();
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let root = manager
+        .start_thread(StartThreadOptions::new(config.clone()))
+        .await
+        .expect("start root thread");
+    let root_existing_turn = root.thread.session.new_default_turn().await;
+    let root_existing_step = StepContext::for_test(Arc::clone(&root_existing_turn));
+    let unrelated = manager
+        .start_thread(StartThreadOptions::new(config.clone()))
+        .await
+        .expect("start independent root");
+
+    if !child_exists_before_enable {
+        manager
+            .set_agent_tree_full_access(root.thread_id, /*enabled*/ true)
+            .await
+            .expect("enable Full Access");
+    }
+    let child = root
+        .thread
+        .session
+        .services
+        .local_agent_runtime
+        .control(root.thread.session.session_id())
+        .spawn_agent_with_metadata(
+            config,
+            vec![UserInput::Text {
+                text: "child task".to_string(),
+                text_elements: Vec::new(),
+            }],
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id: root.thread_id,
+                depth: 1,
+                agent_path: None,
+                agent_nickname: None,
+                agent_role: None,
+            }),
+            SpawnAgentOptions {
+                parent_thread_id: Some(root.thread_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("spawn child agent");
+    let root_yolo_turn = root.thread.session.new_default_turn().await;
+    let child_thread = manager
+        .get_thread(child.thread_id)
+        .await
+        .expect("load child thread");
+    let child_yolo_turn = child_thread.session.new_default_turn().await;
+    let child_step = StepContext::for_test(Arc::clone(&child_yolo_turn));
+    if child_exists_before_enable {
+        manager
+            .set_agent_tree_full_access(root.thread_id, /*enabled*/ true)
+            .await
+            .expect("enable Full Access");
+    }
+
+    for turn in [&root_existing_turn, &root_yolo_turn, &child_yolo_turn] {
+        assert_eq!(
+            (turn.approval_policy(), turn.permission_profile()),
+            (AskForApproval::Never, PermissionProfile::Disabled)
+        );
+    }
+    for step in [&root_existing_step, &child_step] {
+        assert_eq!(
+            step.with_runtime_permissions()
+                .environments
+                .primary()
+                .expect("environment")
+                .permission_profile(),
+            &PermissionProfile::Disabled
+        );
+    }
+
+    assert_eq!(
+        (
+            root.thread.runtime_full_access(),
+            child_thread.runtime_full_access(),
+        ),
+        (true, true)
+    );
+
+    let affected_threads = manager
+        .set_agent_tree_full_access(child.thread_id, /*enabled*/ false)
+        .await
+        .expect("disable Full Access through child");
+    assert_eq!(
+        affected_threads
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>(),
+        std::collections::HashSet::from([root.thread_id, child.thread_id]),
+    );
+    let root_restored_turn = root.thread.session.new_default_turn().await;
+    let child_restored_turn = child_thread.session.new_default_turn().await;
+    assert_eq!(
+        (
+            root.thread.runtime_full_access(),
+            child_thread.runtime_full_access(),
+        ),
+        (false, false)
+    );
+    for turn in [
+        &root_existing_turn,
+        &root_yolo_turn,
+        &child_yolo_turn,
+        &root_restored_turn,
+        &child_restored_turn,
+    ] {
+        assert_eq!(
+            (turn.approval_policy(), turn.permission_profile()),
+            (configured_approval, configured_profile.clone())
+        );
+    }
+    for step in [&root_existing_step, &child_step] {
+        assert_eq!(
+            step.with_runtime_permissions()
+                .environments
+                .primary()
+                .expect("environment")
+                .permission_profile(),
+            &configured_profile
+        );
+    }
+    assert!(!unrelated.thread.runtime_full_access());
+
+    manager
+        .shutdown_all_threads_bounded(Duration::from_secs(/*secs*/ 10))
+        .await;
+}
+
+#[tokio::test]
+async fn full_access_override_respects_managed_permission_profile_allowlist() {
+    for allowed in [false, true] {
+        let temp_dir = tempdir().expect("tempdir");
+        let mut config = test_config().await;
+        config.codex_home = temp_dir.path().abs();
+        config.cwd = config.codex_home.clone();
+        config
+            .permissions
+            .set_permission_profile(PermissionProfile::read_only())
+            .expect("read-only baseline");
+        let mut requirements = config.config_layer_stack.requirements_toml().clone();
+        requirements.default_permissions = Some(":read-only".into());
+        requirements.allowed_permission_profiles = Some(std::collections::BTreeMap::from([
+            (":read-only".into(), true),
+            (":danger-full-access".into(), allowed),
+        ]));
+        config.config_layer_stack = codex_config::ConfigLayerStack::new(
+            config
+                .config_layer_stack
+                .all_layers_low_to_high()
+                .cloned()
+                .collect(),
+            config.config_layer_stack.requirements().clone(),
+            requirements,
+        )
+        .expect("managed requirements");
+        let manager = ThreadManager::with_models_provider_and_home_for_tests(
+            CodexAuth::from_api_key("dummy"),
+            config.model_provider.clone(),
+            config.codex_home.to_path_buf(),
+            Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        );
+        let root = manager
+            .start_thread(StartThreadOptions::new(config))
+            .await
+            .expect("start root");
+        let result = manager
+            .set_agent_tree_full_access(root.thread_id, /*enabled*/ true)
+            .await;
+        assert_eq!(
+            (result.is_ok(), root.thread.runtime_full_access()),
+            (allowed, allowed)
+        );
+        if let Err(error) = result {
+            assert!(
+                error.to_string().contains("allowed_permission_profiles"),
+                "{error}"
+            );
+        }
+        manager
+            .set_agent_tree_full_access(root.thread_id, /*enabled*/ false)
+            .await
+            .expect("disable override");
+        manager
+            .shutdown_all_threads_bounded(Duration::from_secs(/*secs*/ 10))
+            .await;
+    }
+}
+
 #[tokio::test]
 async fn reserved_thread_id_is_used_without_changing_normal_id_generation() {
     let temp_dir = tempdir().expect("tempdir");

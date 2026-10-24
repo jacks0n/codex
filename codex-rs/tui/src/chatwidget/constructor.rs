@@ -115,6 +115,7 @@ impl ChatWidget {
             }),
             transcript: TranscriptState::new(active_cell),
             raw_output_mode: local_settings.tui.raw_output_mode,
+            yolo_status: None,
             config,
             local_settings,
             config_panel_tui,

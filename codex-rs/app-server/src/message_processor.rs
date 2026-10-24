@@ -1009,6 +1009,7 @@ impl MessageProcessor {
             | ClientRequest::ThreadResume { .. }
             | ClientRequest::ThreadRevert { .. }
             | ClientRequest::ThreadSettingsUpdate { .. }
+            | ClientRequest::ThreadFullAccessUpdate { .. }
             | ClientRequest::TurnSettingsUpdate { .. }
             | ClientRequest::ThreadDelete { .. }
             | ClientRequest::ThreadArchive { .. } => (Some(self.turn_admission.admit()?), false),
@@ -1464,6 +1465,11 @@ impl MessageProcessor {
             ClientRequest::ThreadSettingsUpdate { params, .. } => {
                 self.turn_processor
                     .thread_settings_update(&request_id, params)
+                    .await
+            }
+            ClientRequest::ThreadFullAccessUpdate { params, .. } => {
+                self.turn_processor
+                    .thread_full_access_update(&request_id, params)
                     .await
             }
             ClientRequest::ThreadMemoryModeSet { params, .. } => {

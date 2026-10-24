@@ -319,6 +319,7 @@ async fn abandonment_resolve_reports_failed_response_delivery_once() {
 
 struct RecordingReviewer {
     calls: AtomicUsize,
+    full_access: AtomicBool,
     active_elicitations: Arc<AtomicUsize>,
     response: ReviewerResponse,
 }
@@ -327,6 +328,7 @@ impl RecordingReviewer {
     fn new(response: ReviewerResponse) -> Arc<Self> {
         Arc::new(Self {
             calls: AtomicUsize::default(),
+            full_access: AtomicBool::default(),
             active_elicitations: Arc::default(),
             response,
         })
@@ -334,6 +336,23 @@ impl RecordingReviewer {
 }
 
 impl ElicitationReviewer for RecordingReviewer {
+    fn effective_permissions(
+        &self,
+        config: Arc<McpConfig>,
+        request: ElicitationReviewRequest,
+    ) -> BoxFuture<'static, Option<(AskForApproval, PermissionProfile)>> {
+        let enabled = self.full_access.load(Relaxed);
+        async move {
+            let configured = config.permission_profile_for_server(&request.server_name)?;
+            Some(if enabled {
+                (AskForApproval::Never, PermissionProfile::Disabled)
+            } else {
+                (config.approval_policy.value(), configured.clone())
+            })
+        }
+        .boxed()
+    }
+
     fn review(
         &self,
         request: ElicitationReviewRequest,
@@ -420,6 +439,29 @@ async fn send_elicitation(sender: &SendElicitation, marker: Option<Value>) -> El
     sender(RequestId::Number(7), elicitation)
         .await
         .expect("elicitation must receive a terminal response")
+}
+
+#[tokio::test]
+async fn elicitation_uses_live_permissions_before_captured_policy_gates() {
+    let reviewer = RecordingReviewer::new(Ok(None));
+    let (_manager, events, sender) = elicitation_fixture(
+        AskForApproval::Never,
+        PermissionProfile::read_only(),
+        Some(reviewer.clone()),
+    );
+    for (enabled, expected) in [
+        (false, ElicitationAction::Decline),
+        (true, ElicitationAction::Accept),
+        (false, ElicitationAction::Decline),
+    ] {
+        reviewer.full_access.store(enabled, Relaxed);
+        assert_eq!(
+            send_elicitation(&sender, /*marker*/ None).await.action,
+            expected
+        );
+    }
+    assert_eq!(reviewer.calls.load(Relaxed), 0);
+    assert!(events.is_empty());
 }
 
 fn form_elicitations(meta: Option<Value>, properties: Value) -> [Elicitation; 3] {
