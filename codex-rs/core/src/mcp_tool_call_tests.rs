@@ -275,6 +275,7 @@ fn non_apps_tool_does_not_require_account_metadata(meta: JsonValue) {
 
 fn mcp_turn_metadata_context(turn_context: &TurnContext) -> ExecutionMetadata<'_> {
     ExecutionMetadata {
+        sandbox_tags: None,
         model: turn_context.model_info().slug.as_str(),
         reasoning_effort: turn_context.effective_reasoning_effort(),
         node_repl_disabled: turn_context.model_info().node_repl_disabled,
@@ -3721,16 +3722,11 @@ async fn prompt_mode_waits_for_approval_when_annotations_do_not_require_approval
 
 #[tokio::test]
 async fn full_access_mode_skips_mcp_tool_approval_for_all_approval_modes() {
-    let (session, mut turn_context) = make_session_and_context().await;
-    Arc::make_mut(&mut turn_context.config)
-        .permissions
-        .approval_policy
-        .set(AskForApproval::Never)
-        .expect("test setup should allow updating approval policy");
-    Arc::make_mut(&mut turn_context.config)
-        .permissions
-        .set_permission_profile(PermissionProfile::Disabled)
-        .expect("test setup should allow updating permission profile");
+    let (session, turn_context) = make_session_and_context().await;
+    turn_context
+        .runtime_full_access
+        .store(/*val*/ true, std::sync::atomic::Ordering::Release);
+    let config = approval_config(&turn_context);
 
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context);
@@ -3770,7 +3766,7 @@ async fn full_access_mode_skips_mcp_tool_approval_for_all_approval_modes() {
             &ToolName::namespaced(&invocation.server, &invocation.tool),
             &HookToolName::new("mcp__test__tool"),
             &metadata,
-            &approval_config(&turn_context),
+            &config,
             thread_permission_source(&turn_context),
             test_environment_id(&turn_context),
             &McpServerKey::unscoped(&invocation.server),
@@ -3780,6 +3776,85 @@ async fn full_access_mode_skips_mcp_tool_approval_for_all_approval_modes() {
 
         assert_eq!(decision, None);
     }
+}
+
+#[tokio::test]
+async fn runtime_full_access_respects_each_mcp_servers_environment_owner() {
+    let (_, turn) = make_session_and_context().await;
+    let mut environments = turn.initial_environments.clone();
+    let mut owner = environments.primary().expect("primary environment").clone();
+    owner.selection.environment_id = "owner".to_string();
+    owner.config_origin = EnvironmentConfigOrigin::Owner;
+    environments
+        .environments
+        .push(TurnEnvironmentState::Ready(owner));
+    let owner = environments.turn_environments().nth(1).expect("owner");
+    let sandbox = Arc::new(owner.sandbox_context(None));
+    let configured = PermissionProfile::read_only();
+    assert_eq!(
+        environments
+            .clone()
+            .with_full_access()
+            .turn_environments()
+            .map(|environment| environment.permission_profile().clone())
+            .collect::<Vec<_>>(),
+        vec![
+            PermissionProfile::Disabled,
+            owner.permission_profile().clone(),
+        ],
+    );
+    for (source, full_access) in [
+        (
+            McpPermissionSource::Environment {
+                environment_id: "local",
+                sandbox: &sandbox,
+            },
+            PermissionProfile::Disabled,
+        ),
+        (
+            McpPermissionSource::Environment {
+                environment_id: "owner",
+                sandbox: &sandbox,
+            },
+            configured.clone(),
+        ),
+        (
+            McpPermissionSource::Environment {
+                environment_id: "missing",
+                sandbox: &sandbox,
+            },
+            configured.clone(),
+        ),
+        (
+            McpPermissionSource::Thread {
+                profile: &configured,
+                host_cwd: &turn.config.cwd,
+            },
+            PermissionProfile::Disabled,
+        ),
+    ] {
+        for (enabled, expected) in [(true, full_access), (false, configured.clone())] {
+            turn.runtime_full_access
+                .store(enabled, std::sync::atomic::Ordering::Release);
+            assert_eq!(
+                turn.effective_permission_profile(
+                    mcp_config_origin(&environments, &source),
+                    configured.clone(),
+                ),
+                expected,
+                "Full Access {enabled}",
+            );
+        }
+    }
+    turn.runtime_full_access
+        .store(/*val*/ true, std::sync::atomic::Ordering::Release);
+    let step = StepContext::for_test(Arc::new(turn));
+    let metadata = step
+        .turn
+        .turn_metadata_state
+        .current_meta_value_for_mcp_request(ExecutionMetadata::from_step_context(&step))
+        .expect("turn metadata");
+    assert_eq!(metadata["sandbox_mode"], "danger-full-access");
 }
 
 #[tokio::test]

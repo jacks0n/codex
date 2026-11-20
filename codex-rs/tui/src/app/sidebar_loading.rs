@@ -89,6 +89,7 @@ impl Openings {
             ServerNotification::ThreadSettingsUpdated(n) => {
                 updates.settings = Some(n.thread_settings.clone())
             }
+            ServerNotification::ThreadFullAccessUpdated(n) => updates.full_access = Some(n.enabled),
             ServerNotification::ThreadReadStateChanged(_) => updates.read_state_changed = true,
             ServerNotification::TurnStarted(_) | ServerNotification::TurnCompleted(_) => {
                 updates.turn_changed = true

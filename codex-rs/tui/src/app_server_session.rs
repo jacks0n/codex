@@ -98,6 +98,8 @@ use codex_app_server_protocol::ThreadDeleteParams;
 use codex_app_server_protocol::ThreadDeleteResponse;
 use codex_app_server_protocol::ThreadForkParams;
 use codex_app_server_protocol::ThreadForkResponse;
+use codex_app_server_protocol::ThreadFullAccessUpdateParams;
+use codex_app_server_protocol::ThreadFullAccessUpdateResponse;
 use codex_app_server_protocol::ThreadGoalClearParams;
 use codex_app_server_protocol::ThreadGoalClearResponse;
 use codex_app_server_protocol::ThreadGoalGetParams;
@@ -188,6 +190,7 @@ const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 const JSONRPC_INVALID_PARAMS: i64 = -32602;
 pub(crate) const EXTERNAL_AGENT_CONFIG_IMPORT_IN_PROGRESS_MESSAGE: &str = "A previous external agent import is still running. Wait for it to finish before importing again.";
 const THREAD_SETTINGS_UPDATE_METHOD: &str = "thread/settings/update";
+const THREAD_FULL_ACCESS_UPDATE_METHOD: &str = "thread/fullAccess/update";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ForkGoalContinuation {
@@ -417,6 +420,7 @@ pub(crate) struct AppServerSession {
     history_support: ThreadHistorySupport,
     pub(crate) thread_settings_update_supported: bool,
     cloud_turn_settings: user_message_submission::PendingCloudTurnSettings,
+    full_access_update_supported: bool,
     default_model: Option<String>,
     available_models: Vec<ModelPreset>,
     prefetched_model_list: Option<RemoteHandle<Result<Vec<ModelPreset>>>>,
@@ -545,6 +549,8 @@ pub(crate) struct AppServerStartedThread {
     pub(crate) turns: Vec<Turn>,
     pub(crate) blocks_direct_input: bool,
     pub(crate) task_tools_available: bool,
+    /// None when a history-only read did not observe runtime state.
+    pub(crate) runtime_full_access: Option<bool>,
 }
 
 /// Recognize typed server errors without depending on wording or an older server's behavior.
@@ -669,6 +675,7 @@ impl AppServerSession {
             history_support: ThreadHistorySupport::Paginated,
             thread_settings_update_supported: true,
             cloud_turn_settings: Default::default(),
+            full_access_update_supported: true,
             default_model: None,
             available_models: Vec::new(),
             prefetched_model_list: None,
@@ -1871,6 +1878,39 @@ impl AppServerSession {
         }
     }
 
+    pub(crate) async fn thread_full_access_update(
+        &mut self,
+        thread_id: ThreadId,
+        enabled: bool,
+    ) -> Result<Option<bool>> {
+        if !self.full_access_update_supported {
+            return Ok(None);
+        }
+        let request_id = self.next_request_id();
+        match self
+            .request_handle
+            .request_typed::<ThreadFullAccessUpdateResponse>(
+                ClientRequest::ThreadFullAccessUpdate {
+                    request_id,
+                    params: ThreadFullAccessUpdateParams {
+                        thread_id: thread_id.to_string(),
+                        enabled,
+                    },
+                },
+            )
+            .await
+        {
+            Ok(response) => Ok(Some(response.enabled)),
+            Err(TypedRequestError::Server { source, .. })
+                if is_method_unsupported(&source, THREAD_FULL_ACCESS_UPDATE_METHOD) =>
+            {
+                self.full_access_update_supported = false;
+                Ok(None)
+            }
+            Err(err) => Err(err).wrap_err("thread/fullAccess/update failed in TUI"),
+        }
+    }
+
     pub(crate) async fn thread_inject_items(
         &mut self,
         thread_id: ThreadId,
@@ -2968,27 +3008,24 @@ async fn started_thread_from_start_response(
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        runtime_full_access: Some(false),
     })
 }
 
 async fn started_thread_from_resume_response(
     response: ThreadResumeResponse,
     local_settings: &LocalSettings,
-    thread_params_mode: ThreadParamsMode,
 ) -> Result<AppServerStartedThread> {
     let blocks_direct_input = thread_blocks_direct_input(&response.thread);
-    let session = thread_session_state_from_thread_resume_response(
-        &response,
-        local_settings,
-        thread_params_mode,
-    )
-    .await
-    .map_err(color_eyre::eyre::Report::msg)?;
+    let session = thread_session_state_from_thread_resume_response(&response, local_settings)
+        .await
+        .map_err(color_eyre::eyre::Report::msg)?;
     Ok(AppServerStartedThread {
         session,
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        runtime_full_access: Some(response.full_access),
     })
 }
 
@@ -3012,6 +3049,7 @@ async fn started_thread_from_fork_response(
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        runtime_full_access: Some(false),
     })
 }
 
@@ -3054,10 +3092,9 @@ async fn thread_session_state_from_thread_start_response(
     Ok(session)
 }
 
-async fn thread_session_state_from_thread_resume_response(
+pub(crate) async fn thread_session_state_from_thread_resume_response(
     response: &ThreadResumeResponse,
     local_settings: &LocalSettings,
-    _thread_params_mode: ThreadParamsMode,
 ) -> Result<ThreadSessionState, String> {
     // The server owns restored rules. This legacy projection is for display only;
     // normal turns do not send it back as an execution override.
@@ -5174,6 +5211,7 @@ mod tests {
                     duration_ms: None,
                 }],
             },
+            full_access: true,
             model: "gpt-5.5".to_string(),
             model_provider: "openai".to_string(),
             service_tier: None,
@@ -5207,13 +5245,11 @@ mod tests {
             items_backwards_cursor: None,
         };
 
-        let started = started_thread_from_resume_response(
-            response.clone(),
-            &LocalSettings::from(&config),
-            ThreadParamsMode::Remote,
-        )
-        .await
-        .expect("resume response should map");
+        let started =
+            started_thread_from_resume_response(response.clone(), &LocalSettings::from(&config))
+                .await
+                .expect("resume response should map");
+        assert_eq!(started.runtime_full_access, Some(true));
         assert_eq!(started.session.forked_from_id, Some(forked_from_id));
         assert_eq!(
             started.session.runtime_workspace_roots,
@@ -5264,7 +5300,6 @@ mod tests {
         let started = started_thread_from_resume_response(
             response.clone(),
             &LocalSettings::from(&embedded_config),
-            ThreadParamsMode::Embedded,
         )
         .await
         .expect("embedded resume response should map");
@@ -5276,7 +5311,6 @@ mod tests {
         let started = started_thread_from_resume_response(
             empty_roots_response,
             &LocalSettings::from(&config),
-            ThreadParamsMode::Remote,
         )
         .await
         .expect("resume response should map");

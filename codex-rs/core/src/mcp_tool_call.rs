@@ -15,6 +15,7 @@ use crate::guardian::GuardianReviewContext;
 use crate::mcp_openai_file::rewrite_mcp_tool_arguments_for_openai_files;
 use crate::mcp_tool_approval_templates::RenderedMcpToolApprovalParam;
 use crate::mcp_tool_approval_templates::render_mcp_tool_approval_template;
+use crate::runtime_permissions::mcp_config_origin;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
 use crate::session::turn_context::TurnContext;
@@ -747,7 +748,8 @@ async fn handle_approved_mcp_tool_call(
             Ok(maybe_request_codex_apps_auth_elicitation(
                 sess,
                 turn_context,
-                prepared_call.config().approval_policy.value(),
+                turn_context
+                    .effective_approval_policy(prepared_call.config().approval_policy.value()),
                 call_id,
                 &invocation.server,
                 Some(&metadata),
@@ -1061,7 +1063,13 @@ async fn augment_mcp_tool_request_meta_with_sandbox_state(
         .augment_sandbox_metadata(
             &mut meta,
             SandboxState {
-                permission_profile: prepared_call.permission_profile().clone(),
+                permission_profile: step_context.turn.effective_permission_profile(
+                    mcp_config_origin(
+                        &step_context.environments,
+                        &prepared_call.permission_source(),
+                    ),
+                    prepared_call.permission_profile().clone(),
+                ),
                 codex_linux_sandbox_exe: prepared_call.config().codex_linux_sandbox_exe.clone(),
                 sandbox_cwd,
                 use_legacy_landlock: prepared_call.config().use_legacy_landlock,
@@ -1510,9 +1518,7 @@ fn build_mcp_tool_call_request_meta(
     if let Some(serde_json::Value::Object(mut turn_metadata)) = step_context
         .turn
         .turn_metadata_state
-        .current_meta_value_for_mcp_request(ExecutionMetadata::from_settings(
-            &step_context.settings,
-        ))
+        .current_meta_value_for_mcp_request(ExecutionMetadata::from_step_context(step_context))
     {
         // Attribute trusted browser/REPL telemetry from this turn's configuration,
         // without forwarding internal product identity to unrelated MCP servers.
@@ -1725,10 +1731,15 @@ async fn prepare_mcp_tool_approval(
         metadata.connector_id.as_deref(),
         metadata.link_id.as_deref(),
     );
+    let approval_policy = turn_context.effective_approval_policy(config.approval_policy.value());
+    let permission_profile = turn_context.effective_permission_profile(
+        mcp_config_origin(&step_context.environments, &permission_source),
+        permission_source.profile().clone(),
+    );
     if !strict_auto_review
         && mcp_permission_prompt_is_auto_approved(
-            config.approval_policy.value(),
-            permission_source.profile(),
+            approval_policy,
+            &permission_profile,
             McpPermissionPromptAutoApproveContext {
                 tool_approval_mode: Some(policy.mode),
             },
@@ -1889,7 +1900,7 @@ pub(crate) async fn request_mcp_tool_user_approval(
         unreachable!("only MCP actions can request MCP tool approval");
     };
 
-    if *approval_policy == AskForApproval::Never {
+    if turn_context.effective_approval_policy(*approval_policy) == AskForApproval::Never {
         return ApprovalResolution {
             decision: ReviewDecision::denied(
                 "MCP tool call requires approval, but approval policy is never",

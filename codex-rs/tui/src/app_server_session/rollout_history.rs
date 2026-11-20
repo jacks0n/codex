@@ -108,6 +108,7 @@ impl AppServerSession {
                 turns: thread.turns,
                 blocks_direct_input: false,
                 task_tools_available: false,
+                runtime_full_access: None,
             },
             history_notice,
         ))
@@ -199,9 +200,7 @@ impl AppServerSession {
                 HistoryHydrationScope::Initial,
             )
             .await?;
-        let mut started =
-            started_thread_from_resume_response(response, local_settings, ThreadParamsMode::Cloud)
-                .await?;
+        let mut started = started_thread_from_resume_response(response, local_settings).await?;
         scoped.commit_prepared_resume().await.map_err(|err| {
             bootstrap_request_error("thread/resume failed during TUI bootstrap", err)
         })?;
@@ -346,12 +345,7 @@ impl AppServerSession {
         let fork_parent_title = self
             .fork_parent_title_from_app_server(response.thread.forked_from_id.as_deref())
             .await;
-        let mut started = started_thread_from_resume_response(
-            response,
-            local_settings,
-            self.thread_params_mode(),
-        )
-        .await?;
+        let mut started = started_thread_from_resume_response(response, local_settings).await?;
         started.session.fork_parent_title = fork_parent_title;
         if self.task_tools_available(thread_id) {
             self.remember_task_tool_thread(thread_id);

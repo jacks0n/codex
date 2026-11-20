@@ -219,10 +219,15 @@ impl ExecCommandHandler {
         let hook_command = prepared.hook_command.clone();
         let tool_cwd =
             (!prepared.turn_environment.environment().is_remote()).then(|| prepared.cwd.clone());
+        let network = context
+            .step_context
+            .turn
+            .network_for_environment(&prepared.turn_environment)
+            .cloned();
         let request = ExecCommandRequest {
             prepared,
             process_id,
-            network: context.step_context.turn.network.clone(),
+            network,
         };
         let result = match request.prepared.completion_timeout {
             Some(timeout) => {

@@ -114,7 +114,7 @@ pub(crate) fn decide_approval(
                 .can_set(&codex_protocol::config_types::ApprovalsReviewer::User)
                 .is_err();
         let full_access = context.environments().has_full_access(
-            context.approval_policy,
+            context.approval_policy(),
             &turn.config.permissions.effective_permission_profile(),
         );
         let mut require_synchronous_review = options.require_synchronous_review;
@@ -162,7 +162,7 @@ pub(crate) fn decide_approval(
             thread_store: &session.services.thread_extension_data,
             turn_store: &turn.extension_data,
             category: request.category,
-            approval_policy: context.approval_policy,
+            approval_policy: context.approval_policy(),
             approvals_reviewer: context.approvals_reviewer,
             require_guardian,
             require_synchronous_review,

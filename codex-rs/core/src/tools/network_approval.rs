@@ -840,7 +840,7 @@ impl NetworkApprovalService {
             &settings,
             review_environments,
         );
-        if !allows_network_approval_flow(review_context.approval_policy) {
+        if !allows_network_approval_flow(review_context.approval_policy()) {
             if let Some(owner_call) = owner_call.as_ref() {
                 self.record_call_outcome(&owner_call.registration_id, policy_denial_message);
             }

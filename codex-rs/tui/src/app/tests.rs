@@ -121,6 +121,8 @@ mod turn_submission;
 mod user_verification_routes;
 #[path = "tests/worktree_background_terminals_tests.rs"]
 mod worktree_background_terminals_tests;
+#[path = "tests/yolo_mode_tests.rs"]
+mod yolo_mode_tests;
 
 use super::agent_navigation::AgentPickerThreadVisibility;
 use super::owned_transcript::tests::buffer_text;
@@ -735,6 +737,7 @@ async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach()
             turns: Vec::new(),
             blocks_direct_input: false,
             task_tools_available: false,
+            runtime_full_access: Some(false),
         },
         session_lifecycle::ThreadAttachPresentation::SessionLineage,
         /*initial_user_message*/ None,
@@ -3881,6 +3884,12 @@ async fn reopen_saved_side_chat(during: DuringOpen) -> Result<()> {
     )
     .await;
     let notifications = [
+        ServerNotification::ThreadFullAccessUpdated(
+            codex_app_server_protocol::ThreadFullAccessUpdatedNotification {
+                thread_id: child.to_string(),
+                enabled: true,
+            },
+        ),
         turn_started_notification(child, "during-open"),
         agent_message_delta_notification(child, "during-open", "live-item", "first"),
         agent_message_delta_notification(child, "during-open", "live-item", " second"),
@@ -3894,6 +3903,11 @@ async fn reopen_saved_side_chat(during: DuringOpen) -> Result<()> {
     }
     boxed_future!(app.handle_event(&mut tui, &mut server, completed)).await?;
     assert_eq!(app.current_displayed_thread_id(), Some(child));
+    app.chat_widget.setup_status_line(
+        vec![crate::bottom_pane::StatusLineItem::YoloMode],
+        /*use_theme_colors*/ true,
+    );
+    assert_eq!(app.chat_widget.status_line_text().as_deref(), Some("YOLO"));
     let held_accept = |kind| KeyEvent::new_with_kind(KeyCode::Char('g'), KeyModifiers::NONE, kind);
     assert!(
         app.chat_widget
@@ -8459,6 +8473,7 @@ async fn primary_thread_ignores_child_mcp_startup_notifications() {
             turns: Vec::new(),
             blocks_direct_input: false,
             task_tools_available: false,
+            runtime_full_access: Some(false),
         },
         &mut child_snapshot,
     )
@@ -9287,6 +9302,7 @@ async fn make_test_app() -> Box<App> {
         primary_session_configured: None,
         pending_primary_events: VecDeque::new(),
         pending_app_server_requests: PendingAppServerRequests::default(),
+        yolo_mode: YoloMode::default(),
         dynamic_tool_status_updates: tokio::sync::broadcast::channel(/*capacity*/ 64).0,
         dynamic_tool_tasks: HashMap::new(),
         pending_startup_thread_start: false,
@@ -9434,6 +9450,7 @@ pub(super) async fn make_test_app_with_channels() -> (
             primary_session_configured: None,
             pending_primary_events: VecDeque::new(),
             pending_app_server_requests: PendingAppServerRequests::default(),
+            yolo_mode: YoloMode::default(),
             dynamic_tool_status_updates: tokio::sync::broadcast::channel(/*capacity*/ 64).0,
             dynamic_tool_tasks: HashMap::new(),
             pending_startup_thread_start: false,
@@ -9874,6 +9891,7 @@ async fn app_server_thread_replacement_clears_previous_transcript_before_replay(
             )],
             blocks_direct_input: false,
             task_tools_available: false,
+            runtime_full_access: Some(false),
         },
         session_lifecycle::ThreadAttachPresentation::SessionLineage,
         /*initial_user_message*/ None,
@@ -12405,6 +12423,7 @@ async fn refreshed_snapshot_session_persists_resumed_turns() {
             turns: resumed_turns.clone(),
             blocks_direct_input: true,
             task_tools_available: false,
+            runtime_full_access: Some(false),
         },
         &mut snapshot,
     )

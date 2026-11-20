@@ -164,6 +164,10 @@ impl GuardianReviewContext {
         &self.turn
     }
 
+    pub(crate) fn approval_policy(&self) -> AskForApproval {
+        self.turn.effective_approval_policy(self.approval_policy)
+    }
+
     pub(crate) fn environments(&self) -> &TurnEnvironmentSnapshot {
         &self.environments
     }
@@ -204,7 +208,7 @@ impl From<Arc<TurnContext>> for GuardianReviewContext {
             reasoning_effort: turn.reasoning_effort().cloned(),
             reasoning_summary: turn.reasoning_summary(),
             personality: turn.personality(),
-            approval_policy: turn.approval_policy(),
+            approval_policy: turn.config.permissions.approval_policy.value(),
             approvals_reviewer: turn.config.approvals_reviewer,
             turn,
         }

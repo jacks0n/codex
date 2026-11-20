@@ -119,6 +119,7 @@ fn server_notification_requires_delivery(notification: &ServerNotification) -> b
             | ServerNotification::TurnCompleted(_)
             | ServerNotification::ThreadQueueChanged(_)
             | ServerNotification::ThreadSettingsUpdated(_)
+            | ServerNotification::ThreadFullAccessUpdated(_)
             | ServerNotification::ThreadAttachmentUpdated(_)
             | ServerNotification::ExternalAgentConfigImportCompleted(_)
             | ServerNotification::ItemCompleted(ItemCompletedNotification {
@@ -1158,6 +1159,16 @@ mod tests {
 
     #[test]
     fn guaranteed_delivery_helpers_cover_required_server_notifications() {
+        for enabled in [false, true] {
+            assert!(server_notification_requires_delivery(
+                &ServerNotification::ThreadFullAccessUpdated(
+                    codex_app_server_protocol::ThreadFullAccessUpdatedNotification {
+                        thread_id: "thread-1".to_string(),
+                        enabled,
+                    },
+                )
+            ));
+        }
         assert!(server_notification_requires_delivery(
             &ServerNotification::TurnCompleted(TurnCompletedNotification {
                 thread_id: "thread-1".to_string(),

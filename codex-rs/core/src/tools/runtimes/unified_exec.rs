@@ -319,7 +319,7 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
                 )
                 .await;
                 if routes_approval_policy_to_guardian(
-                    ctx.step_context.settings.approval_policy(),
+                    ctx.step_context.approval_policy(),
                     ctx.step_context.settings.approvals_reviewer(),
                 ) && network
                     .remote_policy_decider(launch.proxy.allow_local_binding)
