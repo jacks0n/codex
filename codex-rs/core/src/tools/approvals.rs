@@ -526,7 +526,7 @@ impl Session {
     async fn check_approval_requirement(&self, ctx: &ApprovalContext) -> Result<(), ToolError> {
         if ctx.requires_human_approval() {
             if let Some(reason) = prompt_is_rejected_by_policy(
-                ctx.review_context.approval_policy,
+                ctx.review_context.approval_policy(),
                 /*prompt_is_rule*/ true,
             ) {
                 return Err(ToolError::Rejected(reason.to_string()));

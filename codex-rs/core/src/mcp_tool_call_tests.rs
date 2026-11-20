@@ -29,12 +29,9 @@ use codex_config::types::McpServerToolConfig;
 use codex_features::Features;
 use codex_hooks::HooksConfig;
 use codex_mcp::McpServerKey;
-use codex_mcp::McpPluginAttribution;
-use codex_mcp::McpServerRegistration;
-use codex_mcp::ResolvedMcpCatalog;
-use codex_mcp::codex_apps_mcp_server_config;
 use codex_model_provider::create_model_provider;
 use codex_protocol::ResponseItemId;
+use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EnvironmentConfig;
@@ -3729,18 +3726,7 @@ async fn full_access_mode_skips_mcp_tool_approval_for_all_approval_modes() {
     turn_context
         .runtime_full_access
         .store(/*val*/ true, std::sync::atomic::Ordering::Release);
-    let mut config = approval_config(&turn_context);
-    let mut catalog = config.mcp_server_catalog.to_builder();
-    catalog.register(McpServerRegistration::from_hosted_apps(
-        "test-apps",
-        /*contribution_order*/ 0,
-        codex_apps_mcp_server_config(
-            "https://example.com",
-            /*apps_mcp_product_sku*/ None,
-            /*originator*/ None,
-        ),
-    ));
-    config.mcp_server_catalog = catalog.build();
+    let config = approval_config(&turn_context);
 
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context);
@@ -3814,17 +3800,36 @@ async fn runtime_full_access_respects_each_mcp_servers_environment_owner() {
             .collect::<Vec<_>>(),
         vec![
             PermissionProfile::Disabled,
-            owner
-                .permission_profile()
-                .clone(),
+            owner.permission_profile().clone(),
         ],
     );
     for (source, full_access) in [
-        (McpPermissionSource::Environment { environment_id: "local", sandbox: &sandbox }, PermissionProfile::Disabled),
-        (McpPermissionSource::Environment { environment_id: "owner", sandbox: &sandbox }, configured.clone()),
-        (McpPermissionSource::Environment { environment_id: "missing", sandbox: &sandbox }, configured.clone()),
         (
-            McpPermissionSource::Thread { profile: &configured, host_cwd: &turn.config.cwd },
+            McpPermissionSource::Environment {
+                environment_id: "local",
+                sandbox: &sandbox,
+            },
+            PermissionProfile::Disabled,
+        ),
+        (
+            McpPermissionSource::Environment {
+                environment_id: "owner",
+                sandbox: &sandbox,
+            },
+            configured.clone(),
+        ),
+        (
+            McpPermissionSource::Environment {
+                environment_id: "missing",
+                sandbox: &sandbox,
+            },
+            configured.clone(),
+        ),
+        (
+            McpPermissionSource::Thread {
+                profile: &configured,
+                host_cwd: &turn.config.cwd,
+            },
             PermissionProfile::Disabled,
         ),
     ] {

@@ -61,6 +61,7 @@ pub(super) enum CloseState {
 #[derive(Default)]
 pub(super) struct SubscriptionUpdates {
     pub(super) settings: Option<codex_app_server_protocol::ThreadSettings>,
+    pub(super) full_access: Option<bool>,
     pub(super) turn_changed: bool,
     pub(super) read_state_changed: bool,
     pub(super) close: CloseState,

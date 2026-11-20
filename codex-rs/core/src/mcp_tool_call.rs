@@ -1791,7 +1791,7 @@ async fn prepare_mcp_tool_approval(
                 read_only_hint: annotations.read_only_hint,
             }),
         hook_tool_name: hook_tool_name.clone(),
-        approval_policy,
+        approval_policy: config.approval_policy.value(),
         reviewer: approvals_reviewer,
         approval_mode: policy.mode,
         allow_session_remember: session_approval_key.is_some(),
@@ -1900,7 +1900,7 @@ pub(crate) async fn request_mcp_tool_user_approval(
         unreachable!("only MCP actions can request MCP tool approval");
     };
 
-    if *approval_policy == AskForApproval::Never {
+    if turn_context.effective_approval_policy(*approval_policy) == AskForApproval::Never {
         return ApprovalResolution {
             decision: ReviewDecision::denied(
                 "MCP tool call requires approval, but approval policy is never",

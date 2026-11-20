@@ -414,8 +414,12 @@ impl ToolRouter {
 
         // Resolve runtime permissions at dispatch so a live Full Access toggle also affects tool
         // calls sampled before the toggle changed.
-        // Cells retain their configured snapshot; nested tools resolve permissions at dispatch.
+        // Cells and MCP callbacks retain configured snapshots and project permissions at their boundaries.
         let step_context = if crate::tools::code_mode::is_exec_tool_name(&tool_name)
+            || self
+                .registry
+                .tool(&tool_name)
+                .is_some_and(|tool| tool.mcp_tool_info().is_some())
             || !step_context
                 .turn
                 .runtime_full_access

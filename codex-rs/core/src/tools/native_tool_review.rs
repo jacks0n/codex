@@ -53,7 +53,7 @@ pub(crate) async fn review(invocation: &ToolInvocation) -> Result<(), FunctionCa
     let context = GuardianReviewContext::from(&invocation.step_context);
     // Native tool review has no user-approval fallback. An unsuccessful required review must stop dispatch.
     let require_guardian = codex_guardian_reviewer::routes_approval_policy_to_guardian(
-        context.approval_policy,
+        context.approval_policy(),
         context.approvals_reviewer,
     );
     let decision = spawn_approval_decision(

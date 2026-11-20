@@ -3,6 +3,34 @@ use codex_protocol::models::PermissionProfile;
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
+async fn background_full_access_updates_do_not_mark_transcript_output() -> Result<()> {
+    let mut app = make_test_app().await;
+    let child = ThreadId::new();
+    app.thread_event_channels
+        .insert(child, ThreadEventChannel::new(4));
+    for enabled in [true, false] {
+        app.enqueue_thread_notification(
+            child,
+            ServerNotification::ThreadFullAccessUpdated(
+                codex_app_server_protocol::ThreadFullAccessUpdatedNotification {
+                    thread_id: child.to_string(),
+                    enabled,
+                },
+            ),
+        )
+        .await?;
+        assert!(
+            !app.thread_event_channels[&child]
+                .store
+                .lock()
+                .await
+                .replay_may_have_output
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn full_access_status_follows_configured_permissions_and_displayed_thread() -> Result<()> {
     let mut app = make_test_app().await;
     app.chat_widget
@@ -139,6 +167,8 @@ async fn read_only_history_preserves_observed_full_access() -> Result<()> {
             crate::app_server_session::ResumeModelSettings::PreserveExistingThread,
         )
         .await?;
+    let live_session = started.session.clone();
+    let live_turns = started.turns.clone();
     app.enqueue_primary_thread_session(started.session, started.turns)
         .await?;
     app.toggle_yolo_mode(&mut server).await;
@@ -153,6 +183,9 @@ async fn read_only_history_preserves_observed_full_access() -> Result<()> {
         vec![crate::bottom_pane::StatusLineItem::Permissions],
         /*use_theme_colors*/ true,
     );
+    assert_eq!(app.chat_widget.status_line_text(), None);
+    app.enqueue_primary_thread_session(live_session, live_turns)
+        .await?;
     insta::assert_snapshot!(app.chat_widget.status_line_text().unwrap_or_default(), @"Full Access");
     let cached = app
         .primary_session_configured

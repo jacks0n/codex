@@ -1305,6 +1305,7 @@ impl App {
                         | ServerNotification::ThreadPredictionUpdated(_)
                         | ServerNotification::ThreadAttachmentUpdated(_)
                         | ServerNotification::ThreadSettingsUpdated(_)
+                        | ServerNotification::ThreadFullAccessUpdated(_)
                         | ServerNotification::McpToolCallProgress(_)
                         | ServerNotification::FileChangePatchUpdated(_)
                         | ServerNotification::ServerRequestResolved(_)

@@ -11372,6 +11372,39 @@ async fn turn_context_item_stores_permission_profile() {
 }
 
 #[tokio::test]
+async fn running_review_retains_configured_approval_after_full_access_is_disabled() {
+    let (_, turn) = make_session_and_context().await;
+    let turn = Arc::new(turn);
+    let step = StepContext::for_test(Arc::clone(&turn));
+    let configured = step.settings.approval_policy();
+    assert_ne!(configured, AskForApproval::Never);
+    turn.runtime_full_access
+        .store(true, std::sync::atomic::Ordering::Release);
+    let review = crate::guardian::GuardianReviewContext::from(&step);
+    assert_eq!(review.approval_policy, configured);
+    for enabled in [true, false, true] {
+        turn.runtime_full_access
+            .store(enabled, std::sync::atomic::Ordering::Release);
+        assert_eq!(
+            review.approval_policy(),
+            if enabled {
+                AskForApproval::Never
+            } else {
+                configured
+            }
+        );
+        assert_eq!(
+            codex_protocol::protocol::has_full_access(
+                review.approval_policy(),
+                &PermissionProfile::Disabled,
+                std::iter::empty(),
+            ),
+            enabled
+        );
+    }
+}
+
+#[tokio::test]
 async fn turn_context_item_stores_active_permission_profile() {
     let (_session, mut turn_context) = make_session_and_context().await;
     let active_permission_profile = ActivePermissionProfile::read_only();

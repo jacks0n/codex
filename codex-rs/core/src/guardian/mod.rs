@@ -154,7 +154,7 @@ impl GuardianReviewContext {
             reasoning_effort: settings.reasoning_effort().cloned(),
             reasoning_summary: settings.reasoning_summary,
             personality: settings.personality(),
-            approval_policy: turn.effective_approval_policy(settings.approval_policy()),
+            approval_policy: settings.approval_policy(),
             approvals_reviewer: settings.approvals_reviewer(),
             turn,
         }
@@ -162,6 +162,10 @@ impl GuardianReviewContext {
 
     pub(crate) fn turn(&self) -> &Arc<TurnContext> {
         &self.turn
+    }
+
+    pub(crate) fn approval_policy(&self) -> AskForApproval {
+        self.turn.effective_approval_policy(self.approval_policy)
     }
 
     pub(crate) fn environments(&self) -> &TurnEnvironmentSnapshot {
@@ -184,7 +188,7 @@ impl From<&Arc<StepContext>> for GuardianReviewContext {
             reasoning_effort: step.settings.reasoning_effort().cloned(),
             reasoning_summary: step.settings.reasoning_summary,
             personality: step.settings.personality(),
-            approval_policy: step.approval_policy(),
+            approval_policy: step.settings.approval_policy(),
             approvals_reviewer: step.settings.approvals_reviewer(),
         }
     }
@@ -204,7 +208,7 @@ impl From<Arc<TurnContext>> for GuardianReviewContext {
             reasoning_effort: turn.reasoning_effort().cloned(),
             reasoning_summary: turn.reasoning_summary(),
             personality: turn.personality(),
-            approval_policy: turn.approval_policy(),
+            approval_policy: turn.config.permissions.approval_policy.value(),
             approvals_reviewer: turn.config.approvals_reviewer,
             turn,
         }

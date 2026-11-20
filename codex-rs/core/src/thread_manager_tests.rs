@@ -744,7 +744,7 @@ async fn full_access_override_is_shared_with_existing_and_future_subagents(
         .control(root.thread.session.session_id())
         .spawn_agent_with_metadata(
             config,
-            vec![UserInput::Text {
+            vec![ResolvedUserInput::Text {
                 text: "child task".to_string(),
                 text_elements: Vec::new(),
             }],

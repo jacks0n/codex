@@ -288,7 +288,7 @@ pub(crate) async fn run_permission_request_hooks(
         tool_cwd: payload.tool_cwd,
         transcript_path: sess.hook_transcript_path().await,
         model: review_context.model_info.slug.clone(),
-        permission_mode: hook_permission_mode(review_context.approval_policy),
+        permission_mode: hook_permission_mode(review_context.approval_policy()),
         tool_name: payload.tool_name.name().to_string(),
         matcher_aliases: payload.tool_name.matcher_aliases().to_vec(),
         run_id_suffix: run_id_suffix.to_string(),

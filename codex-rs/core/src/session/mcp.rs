@@ -72,7 +72,8 @@ impl ElicitationReviewer for GuardianMcpElicitationReviewer {
         &self,
         config: Arc<McpConfig>,
         request: ElicitationReviewRequest,
-    ) -> BoxFuture<'static, Option<(AskForApproval, codex_protocol::models::PermissionProfile)>> {
+    ) -> BoxFuture<'static, Option<(AskForApproval, codex_protocol::models::PermissionProfile)>>
+    {
         let session = self.session.clone();
         Box::pin(async move {
             let source = config.permission_source_for_server(&request.server_key)?;
@@ -80,7 +81,9 @@ impl ElicitationReviewer for GuardianMcpElicitationReviewer {
             let Some(session) = session.upgrade() else {
                 return Some(configured);
             };
-            let Some((turn, cancellation)) = session.active_turn_context_and_cancellation_token().await else {
+            let Some((turn, cancellation)) =
+                session.active_turn_context_and_cancellation_token().await
+            else {
                 return Some(configured);
             };
             if cancellation.is_cancelled() {
@@ -88,7 +91,11 @@ impl ElicitationReviewer for GuardianMcpElicitationReviewer {
             }
             let context = mcp_elicitation_call_id(&request)
                 .and_then(|id| session.mcp_tool_approval_metadata(&request.server_key, id));
-            let environments = context.as_ref().map_or(&turn.initial_environments, |context| context.review_context.environments());
+            let environments = context
+                .as_ref()
+                .map_or(&turn.initial_environments, |context| {
+                    context.review_context.environments()
+                });
             Some((
                 turn.effective_approval_policy(configured.0),
                 turn.effective_permission_profile(
@@ -1067,10 +1074,14 @@ impl Session {
 }
 
 fn mcp_elicitation_call_id(request: &ElicitationReviewRequest) -> Option<&str> {
-    request.elicitation.meta().and_then(|meta| match request.server_name.as_str() {
-        CODEX_APPS_MCP_SERVER_NAME => meta.get(MCP_TOOL_CODEX_APPS_META_KEY)?.get("call_id"),
-        _ => meta.get("callId"),
-    }).and_then(Value::as_str)
+    request
+        .elicitation
+        .meta()
+        .and_then(|meta| match request.server_name.as_str() {
+            CODEX_APPS_MCP_SERVER_NAME => meta.get(MCP_TOOL_CODEX_APPS_META_KEY)?.get("call_id"),
+            _ => meta.get("callId"),
+        })
+        .and_then(Value::as_str)
 }
 
 async fn review_guardian_mcp_elicitation(
@@ -1129,10 +1140,15 @@ async fn review_guardian_mcp_elicitation(
                 mcp_config.permission_source_for_server(&request.server_key)?,
             )
         });
-    let environments = approval_context.as_ref().map_or(&turn_context.initial_environments, |context| context.review_context.environments());
+    let environments = approval_context
+        .as_ref()
+        .map_or(&turn_context.initial_environments, |context| {
+            context.review_context.environments()
+        });
     if let Some((id, sandbox)) = &mut environment_permissions {
         Arc::make_mut(sandbox).permissions = turn_context.effective_permission_profile(
-            environments.config_origin(id), sandbox.permissions.clone(),
+            environments.config_origin(id),
+            sandbox.permissions.clone(),
         );
     }
     let full_access = if scoped {
@@ -1147,11 +1163,22 @@ async fn review_guardian_mcp_elicitation(
             .map(|(_, sandbox)| &sandbox.permissions)
             .or_else(|| mcp_config.permission_profile_for_server(&request.server_key));
         permissions.is_some_and(|permissions| {
-            codex_protocol::protocol::has_full_access(turn_context.effective_approval_policy(policy), permissions, std::iter::empty())
+            codex_protocol::protocol::has_full_access(
+                turn_context.effective_approval_policy(policy),
+                permissions,
+                std::iter::empty(),
+            )
         })
     } else {
         let runtime_step_environments = environments.clone().with_full_access();
-        let environments = if turn_context.runtime_full_access.load(std::sync::atomic::Ordering::Acquire) { &runtime_step_environments } else { environments };
+        let environments = if turn_context
+            .runtime_full_access
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            &runtime_step_environments
+        } else {
+            environments
+        };
         environments.has_full_access(
             turn_context.approval_policy(),
             &turn_context.permission_profile(),
@@ -1293,11 +1320,11 @@ async fn review_guardian_mcp_elicitation(
             },
         }
     } else {
-        let approval_policy = turn_context.effective_approval_policy(mcp_config.approval_policy.value());
+        let approval_policy =
+            turn_context.effective_approval_policy(mcp_config.approval_policy.value());
         match approval_policy {
             AskForApproval::Never => {
-                let Some(source) =
-                    mcp_config.permission_source_for_server(&request.server_key)
+                let Some(source) = mcp_config.permission_source_for_server(&request.server_key)
                 else {
                     return Ok(Some(mcp_elicitation_decline_without_message()));
                 };
@@ -1344,7 +1371,7 @@ async fn review_guardian_mcp_elicitation(
             elicitation_connector_id(&request.elicitation),
             /*link_id*/ None,
         );
-        review_context.approval_policy = approval_policy;
+        review_context.approval_policy = mcp_config.approval_policy.value();
         review_context.approvals_reviewer = approvals_reviewer;
         match guardian_elicitation_review_request(&request, originating_call_id) {
             GuardianElicitationReview::NotRequested => return Ok(None),

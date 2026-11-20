@@ -3884,6 +3884,12 @@ async fn reopen_saved_side_chat(during: DuringOpen) -> Result<()> {
     )
     .await;
     let notifications = [
+        ServerNotification::ThreadFullAccessUpdated(
+            codex_app_server_protocol::ThreadFullAccessUpdatedNotification {
+                thread_id: child.to_string(),
+                enabled: true,
+            },
+        ),
         turn_started_notification(child, "during-open"),
         agent_message_delta_notification(child, "during-open", "live-item", "first"),
         agent_message_delta_notification(child, "during-open", "live-item", " second"),
@@ -3897,6 +3903,11 @@ async fn reopen_saved_side_chat(during: DuringOpen) -> Result<()> {
     }
     boxed_future!(app.handle_event(&mut tui, &mut server, completed)).await?;
     assert_eq!(app.current_displayed_thread_id(), Some(child));
+    app.chat_widget.setup_status_line(
+        vec![crate::bottom_pane::StatusLineItem::YoloMode],
+        /*use_theme_colors*/ true,
+    );
+    assert_eq!(app.chat_widget.status_line_text().as_deref(), Some("YOLO"));
     let held_accept = |kind| KeyEvent::new_with_kind(KeyCode::Char('g'), KeyModifiers::NONE, kind);
     assert!(
         app.chat_widget

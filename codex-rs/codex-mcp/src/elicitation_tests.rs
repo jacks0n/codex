@@ -363,7 +363,7 @@ impl ElicitationReviewer for RecordingReviewer {
     ) -> BoxFuture<'static, Option<(AskForApproval, PermissionProfile)>> {
         let enabled = self.full_access.load(Relaxed);
         async move {
-            let configured = config.permission_profile_for_server(&request.server_name)?;
+            let configured = config.permission_profile_for_server(&request.server_key)?;
             Some(if enabled {
                 (AskForApproval::Never, PermissionProfile::Disabled)
             } else {

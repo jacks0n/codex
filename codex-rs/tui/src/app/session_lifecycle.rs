@@ -449,7 +449,7 @@ impl App {
             .get(&thread_id)
             .is_some_and(|channel| channel.attachment() == ThreadEventAttachment::ExternalWriter);
         let (mut session, turns, live_attached) = match prepared {
-            PreparedAttachment::Live(started) => {
+            PreparedAttachment::Live(mut started) => {
                 if let Some(entry) = self.agent_navigation.get(&thread_id).cloned() {
                     self.upsert_agent_picker_thread(
                         thread_id,
@@ -462,6 +462,9 @@ impl App {
                 if started.blocks_direct_input {
                     self.agent_navigation.mark_parent_owned(thread_id);
                 }
+                started.runtime_full_access = incoming
+                    .and_then(|updates| updates.full_access)
+                    .or(started.runtime_full_access);
                 self.observe_started_thread_full_access(&started);
                 (started.session, started.turns, true)
             }

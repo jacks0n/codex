@@ -200,9 +200,7 @@ impl AppServerSession {
                 HistoryHydrationScope::Initial,
             )
             .await?;
-        let mut started =
-            started_thread_from_resume_response(response, local_settings, ThreadParamsMode::Cloud)
-                .await?;
+        let mut started = started_thread_from_resume_response(response, local_settings).await?;
         scoped.commit_prepared_resume().await.map_err(|err| {
             bootstrap_request_error("thread/resume failed during TUI bootstrap", err)
         })?;

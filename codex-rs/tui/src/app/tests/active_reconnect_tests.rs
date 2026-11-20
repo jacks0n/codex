@@ -778,7 +778,8 @@ async fn reconnect_allows_slow_hydration_but_bounds_a_stalled_server() -> Result
                 &mut events,
                 result?,
                 // Keep the version-warning snapshot independent of release packaging.
-                /*client_version*/ "0.0.0",
+                /*client_version*/
+                "0.0.0",
             )
             .await?;
             assert!(app.thread_unavailable(id));
